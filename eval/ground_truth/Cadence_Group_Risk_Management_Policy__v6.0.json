@@ -1,0 +1,56 @@
+[
+  {
+    "entity": "PERSON_NAME",
+    "text": "Miriam T. Achebe",
+    "page": 1,
+    "source": "ocr"
+  },
+  {
+    "entity": "PERSON_NAME",
+    "text": "Anthony P. Brightwell",
+    "page": 2,
+    "source": "ocr"
+  },
+  {
+    "entity": "EMPLOYEE_ID",
+    "text": "EMP-38104",
+    "page": 1,
+    "source": "ocr"
+  },
+  {
+    "entity": "EMPLOYEE_ID",
+    "text": "EMP-40522",
+    "page": 2,
+    "source": "ocr"
+  },
+  {
+    "entity": "EMAIL",
+    "text": "m.achebe@cadencefg.com",
+    "page": 1,
+    "source": "ocr"
+  },
+  {
+    "entity": "PHONE_NUMBER",
+    "text": "+1 (212) 555-0147",
+    "page": 2,
+    "source": "ocr"
+  },
+  {
+    "entity": "ADDRESS",
+    "text": "144 Oakwood Terrace, Stamford, CT 06903",
+    "page": 7,
+    "source": "ocr"
+  },
+  {
+    "entity": "PAN_INDIA",
+    "text": "ABCDE1234F",
+    "page": 25,
+    "source": "ocr"
+  },
+  {
+    "entity": "PESEL_POLAND",
+    "text": "850214xxxxx",
+    "page": 25,
+    "source": "ocr"
+  }
+]
