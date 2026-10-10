@@ -32,3 +32,5 @@ Thumbs.db
 # Local scratch or temporary artifacts
 scratch/
 .tempmediaStorage/
+cloudflared.exe
+*.exe
