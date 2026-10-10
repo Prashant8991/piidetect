@@ -10,7 +10,7 @@ from .tokens import TokenMap
 TOKEN_RX = re.compile(r"\[[A-Z_]+_\d+\]|\[REDACTED\]")
 
 
-def approve(units, review=False):
+def approve(units, review=True):
     """Ask whether each unique detected value is PII before redacting it."""
     answers = {}
     for u in units:

@@ -27,12 +27,22 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Enable CORS for local testing
+# Restrict CORS to localhost/127.0.0.1 by default, configurable by environment variable
+cors_env = os.environ.get("CORS_ORIGINS", "")
+if cors_env.strip() == "*":
+    allowed_origins = ["*"]
+elif cors_env.strip():
+    allowed_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+elif os.environ.get("RENDER"):
+    allowed_origins = ["*"]
+else:
+    allowed_origins = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -105,17 +115,23 @@ async def process_sample(req: ProcessSampleRequest):
             redaction_mode=req.redaction_mode,
             max_pdf_pages=req.max_pdf_pages
         )
-        # Cache bytes and entity mapping for native document export
+        # Cache bytes, entities, and structural blocks for layout-preserved native export
         PROCESSED_FILE_CACHE[sample_info["filename"]] = {
             "file_bytes": file_bytes,
             "entity_map": result.get("entity_map", {}),
             "entity_count": result.get("entity_count", 0),
-            "sanitized_text": result.get("sanitized_text", "")
+            "sanitized_text": result.get("sanitized_text", ""),
+            "entities": result.get("entities", []),
+            "structural_blocks": result.get("structural_blocks", [])
         }
         result["sample_info"] = sample_info
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
+ALLOWED_EXTENSIONS = {".pptx", ".docx", ".pdf", ".txt"}
 
 
 @app.post("/api/upload")
@@ -124,10 +140,28 @@ async def upload_file(
     redaction_mode: str = Form("tokenization"),
     max_pdf_pages: int = Form(5)
 ):
-    """Uploads and processes any .pptx, .docx, .pdf, or .txt file."""
+    """Uploads, validates, and processes any .pptx, .docx, .pdf, or .txt file."""
+    filename = file.filename or ""
+    _, ext = os.path.splitext(filename.lower())
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type '{ext}'. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
     file_bytes = await file.read()
-    filename = file.filename
-    
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File exceeds maximum upload size of 50MB ({len(file_bytes)} bytes received)."
+        )
+
+    # Magic bytes header validation
+    if ext == ".pdf" and not file_bytes.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="Invalid PDF: missing '%PDF' header.")
+    elif ext in {".docx", ".pptx"} and not file_bytes.startswith(b"PK\x03\x04"):
+        raise HTTPException(status_code=400, detail="Invalid OpenXML file: missing zip container header.")
+
     try:
         result = engine.process_document(
             filename=filename,
@@ -135,12 +169,14 @@ async def upload_file(
             redaction_mode=redaction_mode,
             max_pdf_pages=max_pdf_pages
         )
-        # Cache bytes and entity mapping for native document export
+        # Cache bytes, entities, and structural blocks for layout-preserved native export
         PROCESSED_FILE_CACHE[filename] = {
             "file_bytes": file_bytes,
             "entity_map": result.get("entity_map", {}),
             "entity_count": result.get("entity_count", 0),
-            "sanitized_text": result.get("sanitized_text", "")
+            "sanitized_text": result.get("sanitized_text", ""),
+            "entities": result.get("entities", []),
+            "structural_blocks": result.get("structural_blocks", [])
         }
         return result
     except Exception as e:
@@ -180,7 +216,9 @@ async def download_redacted(req: DownloadRedactedRequest):
         sanitized_text=req.sanitized_text,
         entity_map=entity_map,
         entity_count=entity_count,
-        export_format=req.export_format
+        export_format=req.export_format,
+        structural_blocks=cached.get("structural_blocks", []),
+        entities=cached.get("entities", [])
     )
 
     return Response(
@@ -209,16 +247,17 @@ async def export_audit(req: ExportAuditRequest):
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Header
-        writer.writerow(["Entity_ID", "Type", "Original_Text", "Severity", "Confidence", "Context_Snippet", "Reason"])
+        # Header: never output raw PII text to audit export
+        writer.writerow(["Entity_ID", "Type", "Token", "Value_Hash", "Severity", "Confidence", "Source", "Reason"])
         for ent in req.audit_report.get("detailed_findings", []):
             writer.writerow([
                 ent.get("id"),
                 ent.get("type"),
-                ent.get("text"),
+                ent.get("token"),
+                ent.get("value_hash"),
                 ent.get("severity"),
                 ent.get("confidence"),
-                ent.get("context"),
+                ent.get("source", "native"),
                 ent.get("reason")
             ])
             
@@ -295,7 +334,7 @@ async def ask_agent(req: AskAgentRequest):
 
     token_refs = ', '.join(f'`{t}`' for t in tokens_found[:5]) if tokens_found else 'None required'
     
-    response_markdown = f"""### 🛡️ Cadence Document Analysis Agent (Post-Sanitization Response)
+    response_markdown = f"""### Cadence Document Analysis Agent (Post-Sanitization Response)
 
 **Security Clearance:** `PASSED` (Zero-PII-to-LLM Enforced)  
 **Artifact Context:** `{req.filename}`  
@@ -388,9 +427,11 @@ async def serve_index():
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0" if (os.environ.get("RENDER") or os.environ.get("PORT")) else "127.0.0.1")
     print("\n" + "="*70)
     print("  OPTIV CONSULTING - CADENCE FINANCIAL GROUP AI PRIVACY SHIELD")
-    print("  Server running on http://127.0.0.1:8000")
+    print(f"  Server running on http://{host}:{port}")
     print("="*70 + "\n")
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("server:app", host=host, port=port, reload=False if os.environ.get("RENDER") else True)
 

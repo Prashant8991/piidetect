@@ -15,10 +15,13 @@ import unicodedata
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
+import secrets
 
 import docx
 from pptx import Presentation
 import pypdf
+import fitz
+from PIL import Image
 from rapidocr_onnxruntime import RapidOCR
 from pii_redactor.validators import verhoeff_ok, iban_ok, luhn_ok
 
@@ -37,20 +40,60 @@ def get_ocr_engine():
         _ocr_engine = RapidOCR()
     return _ocr_engine
 
-# Deterministic salt for cross-artifact stable tokens (HMAC-SHA256)
-HMAC_SECRET = b"OPTIV_CADENCE_AI_PRIVACY_SHIELD_2026_SECRET"
+# Dynamic secure HMAC secret loading (Part 1.5b Security Hardening)
+def get_hmac_secret() -> bytes:
+    env_secret = os.environ.get("PII_HMAC_SECRET")
+    if env_secret:
+        return env_secret.encode('utf-8') if isinstance(env_secret, str) else env_secret
+    
+    secret_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".hmac_secret")
+    if os.path.exists(secret_path):
+        try:
+            with open(secret_path, "rb") as f:
+                content = f.read().strip()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    new_secret = secrets.token_bytes(32)
+    try:
+        with open(secret_path, "wb") as f:
+            f.write(new_secret)
+    except Exception:
+        pass
+    return new_secret
+
+HMAC_SECRET = get_hmac_secret()
+
+def canonicalize_person_name(raw: str) -> str:
+    clean = raw.strip()
+    clean = re.sub(r'^(?:\[OC\]|Dr\.|Mr\.|Ms\.|Mrs\.|Prof\.)\s*', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'[^\w\s-]', '', clean).strip().lower()
+    parts = clean.split()
+    if len(parts) >= 1:
+        # Canonicalize to surname so full name, initials, and surname share stable token
+        return parts[-1]
+    return clean
 
 def generate_stable_token(entity_type: str, raw_value: str) -> str:
     """
     Generates a deterministic, pseudonymized stable token using HMAC-SHA256.
     Ensures that the exact same person, email, or ID receives the identical token
-    across PPTX, DOCX, and PDF artifacts (e.g. [PERSON_3f9a1c]).
+    across PPTX, DOCX, and PDF artifacts (e.g. [PERSON_NAME_3f9a1c]).
     """
-    normalized = raw_value.strip().lower()
-    # Strip common titles and punctuation for robust name matching
-    normalized = re.sub(r'\b(mr\.|ms\.|mrs\.|dr\.|vp|chief|officer|head\s+of|the)\b', '', normalized)
-    normalized = re.sub(r'[\s\-_.,]+', '', normalized)
-    h = hmac.new(HMAC_SECRET, normalized.encode('utf-8'), hashlib.sha256).hexdigest()[:6]
+    if entity_type == "PERSON_NAME":
+        norm_key = canonicalize_person_name(raw_value)
+    elif entity_type == "PHONE_NUMBER":
+        norm_key = re.sub(r'\D', '', raw_value)
+        if len(norm_key) > 7:
+            norm_key = norm_key[-10:]
+    elif entity_type == "EMAIL":
+        norm_key = raw_value.strip().lower()
+    else:
+        norm_key = re.sub(r'[\s\-_.,]+', '', raw_value.strip().lower())
+
+    h = hmac.new(HMAC_SECRET, norm_key.encode('utf-8'), hashlib.sha256).hexdigest()[:6]
     return f"[{entity_type}_{h}]"
 
 
@@ -85,8 +128,69 @@ ALLOWLIST_ORGANIZATIONS = {
 
 # Speak Up Hotline (Corporate compliance number, not personal mobile)
 ALLOWLIST_PHONES = {
-    "+1 (800) 555-0199", "800-555-0199", "0800-555-0199"
+    "+1 (800) 555-0199", "800-555-0199", "0800-555-0199", "+1 (800) 555 0199", "(800) 555-0199", "8005550199"
 }
+ALLOWLIST_PHONE_DIGITS = {"8005550199", "18005550199", "08005550199"}
+
+# False-Positive Vocabularies: Roles, Titles, Corporate Departments & Frameworks
+CORPORATE_ROLES_AND_DEPARTMENTS = {
+    # Departments & Functions
+    "Information Security", "Operational Risk", "Technology & Data", "People & Culture",
+    "Risk, Compliance & Security", "Internal Assurance", "Third-Party Risk", "Enterprise Risk",
+    "Compliance", "Legal", "Operations", "Finance", "Engineering", "Data & Analytics",
+    "Infrastructure & Cloud", "Human Resources", "Business Continuity", "Audit",
+    "Governance", "Corporate Affairs", "Office of the CEO",
+
+    # Generic Roles & Ownership
+    "Business Owner", "Service Owner", "System Owner", "Process Owner", "Product Owner",
+    "Risk Owner", "Control Owner", "Data Owner", "Asset Owner", "Application Owner",
+    "Incident Commander", "Lead Assessor", "Risk Manager", "Compliance Officer",
+
+    # Executive Titles
+    "Chief Executive Officer", "Chief Operating Officer", "Chief Financial Officer",
+    "Chief Information Officer", "Chief Risk Officer", "Chief People Officer",
+    "General Counsel", "Data Protection Officer", "Director, Third-Party Risk",
+    "Director, Internal Assurance", "VP, Engineering", "VP, Compliance",
+    "VP, Data & Analytics", "VP, Infrastructure & Cloud",
+
+    # Committees & Regulators
+    "Board Risk Committee", "Audit Committee", "Executive Committee",
+    "Group Executive Risk Committee", "Federal Reserve", "PRA", "FCA", "FinCEN",
+    "EBA", "OCC", "SEC", "Cadence Financial Group", "Cadence Group",
+    "OneTrust", "SecureGRC", "Halloran & Pike", "Halloran Pike",
+
+    # Frameworks & Tables
+    "Risk Management Policy", "TPRM Training", "Third-Party Risk Management",
+    "Executive Leadership", "Org Pack", "Service Level Agreement",
+    "Standard Operating Procedure", "Business Unit", "Working Group",
+    "Role Holder Directory", "Named Contacts By Division"
+}
+
+def is_role_or_department(text: str) -> bool:
+    clean = text.strip()
+    if not clean or len(clean) < 2:
+        return True
+    if clean in CORPORATE_ROLES_AND_DEPARTMENTS:
+        return True
+    clean_lower = clean.lower()
+    for item in CORPORATE_ROLES_AND_DEPARTMENTS:
+        if clean_lower == item.lower():
+            return True
+    role_words = {
+        "vp", "vice", "president", "director", "chief", "officer", "manager", "head", 
+        "lead", "analyst", "owner", "engineer", "administrator", "executive", "general", 
+        "counsel", "protection", "reviewer", "assessor", "coordinator"
+    }
+    dep_words = {
+        "security", "risk", "compliance", "technology", "data", "culture", "governance", 
+        "operations", "operational", "finance", "audit", "assurance", "infrastructure", "cloud", 
+        "engineering", "training", "information", "people", "corporate", "legal",
+        "enterprise", "business", "third", "party", "internal", "external"
+    }
+    words = set(re.findall(r'[a-z]+', clean_lower))
+    if words and words.issubset(role_words | dep_words | {"of", "the", "and"}):
+        return True
+    return False
 
 
 # ==============================================================================
@@ -107,9 +211,11 @@ CADENCE_KNOWN_PEOPLE = [
     "Gerhardt Wenzel", "G. Wenzel", "Wenzel",
     "Bartholomew Nkemdirim", "B. Nkemdirim", "Nkemdirim",
     "Yasmin El-Katib", "Y. El-Katib", "El-Katib",
-    "S. Aarnio", "Aarnio",
-    "N. Brandvold", "Brandvold",
-    "R. Quintanilla", "Quintanilla",
+    "Rosalind Featherstone", "R. Featherstone", "Featherstone",
+    "Hyun-Woo Park", "H.-W. Park",
+    "Nikolai Brandvold", "N. Brandvold", "Brandvold",
+    "Solveig Aarnio", "S. Aarnio", "Aarnio",
+    "Rafael Quintanilla", "R. Quintanilla", "Quintanilla",
 
     # OneTrust TPRM Reviewers & Admins
     "Daniela Figueroa", "Bridgett Gatewood", "KC Burney", "Jyoti Karwal",
@@ -118,6 +224,7 @@ CADENCE_KNOWN_PEOPLE = [
     # Scanned Policy Owners, Committee Chairs & Hard-Case Personnel (§16.5, §18.5)
     "Miriam T. Achebe", "M. Achebe", "Achebe",
     "Anthony P. Brightwell", "A. Brightwell", "Brightwell",
+    "Helena Vorstermann", "H. Vorstermann", "Vorstermann",
     "Lars-Erik Brannstrom", "L.-E. Brannstrom", "Brannstrom",
     "Katarzyna Kowalska", "Aarav Sharma", "Rajesh Patel", "Priya Nair",
 
@@ -137,7 +244,13 @@ REGEX_PATTERNS = {
         re.IGNORECASE
     ),
     "PHONE_NUMBER": re.compile(
-        r'(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}\b'
+        r'(?i)(?<!\w)\+\d{1,4}[\s.-]*(?:\(\s*\d{1,4}\s*\)[\s.-]*)?(?:\d{1,5}[\s.-]*){2,6}\d{2,5}\b'
+        r'|(?<!\w)\+\d{8,15}\b'
+        r'|(?<!\w)\+\d{1,4}[\s.-]*\(\s*\d{2,4}\s*\)[\s.-]*\d{2,5}\b'
+        r'|\(\s*\d{2,4}\s*\)[\s.-]*\d{3,5}\b'
+        r'|\b(?:\(?\s*\d{2,4}\s*\)?[\s.-]+)?(?:\d{2,4}[\s.-]+)\d{2,5}\b'
+        r'|\b(?:\+?\d{1,4}[\s.-]*)?(?:\(?\s*\d{1,4}\s*\)?[\s.-]*)?\d{0,4}555\d{3,5}\b'
+        r'|\b555[\s.-]\d{4}\b'
     ),
     "EMPLOYEE_ID": re.compile(
         r'\b(?:EMP|DIR|MER-[A-Z]{2})-\d{4,6}\b', 
@@ -200,9 +313,10 @@ REGEX_PATTERNS = {
 
 # Contextual prefixes for names in narrative prose & tables
 NAME_PREFIX_PATTERNS = [
-    re.compile(r'(?:Policy\s+owner|Author|Approved\s+by|chaired\s+by|Author\(s\)|Peer\s+Reviewer|QA\s+Reviewer|Client\s+Contact|Lead|Assignee|Contact|VP,|Chief\s+[A-Za-z]+\s+Officer|Director|Admin|attested\s+by|audited\s+by)\s*[:\-–—]?\s+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)', re.MULTILINE),
-    re.compile(r'(?:m\.|d\.|p\.|t\.|e\.|c\.|a\.|i\.|g\.|b\.|y\.)([a-z]+)@', re.IGNORECASE)
+    re.compile(r'(?:Policy\s+owner|Author|Approved\s+by|Chaired\s+by|chaired\s+by|Led\s+by|Author\(s\)|Peer\s+Reviewer|QA\s+Reviewer|Client\s+Contact|Lead|Assignee|Contact|VP,|Chief\s+[A-Za-z]+\s+Officer|Director|Admin|attested\s+by|audited\s+by|Prepared\s+by|Reviewed\s+by)\s*[:\-–—]?\s+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)', re.MULTILINE),
+    re.compile(r'(?:m\.|d\.|p\.|t\.|e\.|c\.|a\.|i\.|g\.|b\.|y\.|r\.|s\.|h\.|n\.)([a-z]+)@', re.IGNORECASE)
 ]
+
 
 
 # ==============================================================================
@@ -276,6 +390,30 @@ def extract_text_from_pptx(file_bytes: bytes) -> Tuple[str, List[Dict[str, Any]]
     return full_text, structural_blocks, meta
 
 
+def normalize_ocr_line(line: str) -> str:
+    """Normalizes OCR lines: converts full-width punctuation and recovers merged words."""
+    if not line:
+        return ""
+    fw_map = {
+        '（': '(', '）': ')', '：': ':', '｜': '|', '，': ',', 
+        '“': '"', '”': '"', '’': "'", '‘': "'", '；': ';', '—': '-', '–': '-'
+    }
+    for k, v in fw_map.items():
+        line = line.replace(k, v)
+    # Recover comma/colon spacing: d.quarshie@cadencefg.com,+4420 -> d.quarshie@cadencefg.com, +4420
+    line = re.sub(r'([a-zA-Z0-9]),(\+?\d)', r'\1, \2', line)
+    line = re.sub(r'([a-zA-Z0-9])\((\+?\d)', r'\1 (\2', line)
+    # Recover country-code joined with capitalized surname: +331HelenaVorstermann -> +331 Helena Vorstermann
+    line = re.sub(r'(\+\d{1,4})([A-Z][a-z]+)', r'\1 \2', line)
+    # Recover camel-case merged words: HelenaVorstermann -> Helena Vorstermann
+    line = re.sub(r'([a-z])([A-Z])', r'\1 \2', line)
+    # Recover initial/period merged words: MiriamT. -> Miriam T.
+    line = re.sub(r'([A-Za-z])\.([A-Z])', r'\1. \2', line)
+    # Recover merged word-digits if not identifier: Risk2026 -> Risk 2026
+    line = re.sub(r'([a-z]{3,})(\d{4})\b', r'\1 \2', line)
+    return line.strip()
+
+
 def extract_text_from_docx(file_bytes: bytes) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
     doc = docx.Document(io.BytesIO(file_bytes))
     metadata = extract_metadata_from_docx(file_bytes)
@@ -290,9 +428,25 @@ def extract_text_from_docx(file_bytes: bytes) -> Tuple[str, List[Dict[str, Any]]
             lines.append(f"Last Modified By: {metadata['lastModifiedBy']}")
         lines.append("----------------------------------\n")
 
+    # 1. Section Headers & Footers
+    for s_idx, sec in enumerate(doc.sections, 1):
+        h_lines = [p.text.strip() for p in sec.header.paragraphs if p.text.strip()]
+        f_lines = [p.text.strip() for p in sec.footer.paragraphs if p.text.strip()]
+        if h_lines:
+            h_text = " | ".join(h_lines)
+            lines.append(f"--- [HEADER SECTION {s_idx}] ---")
+            lines.append(h_text)
+            structural_blocks.append({"section_type": "header", "section_id": s_idx, "method": "native", "content": h_text})
+        if f_lines:
+            f_text = " | ".join(f_lines)
+            lines.append(f"--- [FOOTER SECTION {s_idx}] ---")
+            lines.append(f_text)
+            structural_blocks.append({"section_type": "footer", "section_id": s_idx, "method": "native", "content": f_text})
+
     p_count = 0
     t_count = 0
 
+    # 2. Body Paragraphs and Tables
     for element in doc.element.body:
         if element.tag.endswith('p'):
             p = docx.text.paragraph.Paragraph(element, doc)
@@ -324,13 +478,57 @@ def extract_text_from_docx(file_bytes: bytes) -> Tuple[str, List[Dict[str, Any]]
                 "content": "\n".join(table_lines)
             })
 
+    # 3. Embedded Images OCR (Screenshots / Graphics in word/media/)
+    embedded_images_count = 0
+    try:
+        ocr = get_ocr_engine()
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+            media_names = [n for n in z.namelist() if n.startswith('word/media/')]
+            raster_images = []
+            for m_name in media_names:
+                if m_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    info = z.getinfo(m_name)
+                    if info.file_size > 20480: # >= 20KB to prioritize rich screenshots and skip tiny bullets
+                        raster_images.append((info.file_size, m_name))
+            raster_images.sort(reverse=True)
+            # Scan top 5 content screenshots with optimized scaling
+            for _, m_name in raster_images[:5]:
+                img_data = z.read(m_name)
+                try:
+                    pil_img = Image.open(io.BytesIO(img_data))
+                    if max(pil_img.size) > 1000:
+                        scale = 1000 / max(pil_img.size)
+                        pil_img = pil_img.resize((int(pil_img.width * scale), int(pil_img.height * scale)), Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format='PNG')
+                    ocr_res, _ = ocr(buf.getvalue())
+                    if ocr_res:
+                        img_lines = [normalize_ocr_line(r[1]) for r in ocr_res if r[1].strip()]
+                        if img_lines:
+                            embedded_images_count += 1
+                            bname = os.path.basename(m_name)
+                            lines.append(f"\n--- [EMBEDDED IMAGE: {bname}] ---")
+                            lines.extend(img_lines)
+                            structural_blocks.append({
+                                "section_type": "embedded_image",
+                                "section_id": bname,
+                                "method": "ocr",
+                                "content": "\n".join(img_lines)
+                            })
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
     full_text = "\n".join(lines)
     meta = {
         "paragraphs": p_count,
         "tables": t_count,
         "metadata": metadata,
+        "embedded_images_scanned": embedded_images_count,
         "format": "docx",
-        "extraction_method": "Native OpenXML Element Parsing",
+        "extraction_method": "Native OpenXML + Raster Image OCR",
         "pages_info": [{"page": 1, "method": "native"}]
     }
     return full_text, structural_blocks, meta
@@ -357,20 +555,66 @@ def extract_text_from_pdf(file_bytes: bytes, max_pages: Optional[int] = None) ->
         pages_info.append({"page": page_num, "method": page_method})
 
         page_content = ""
+        page_boxes = []
+        img_w, img_h = 0, 0
         if is_scanned and page.images:
             scanned_pages_count += 1
             ocr_text_lines = []
             for img in page.images:
                 try:
+                    pil_img = Image.open(io.BytesIO(img.data))
+                    img_w, img_h = pil_img.size
                     ocr_res, _ = ocr(img.data)
                     if ocr_res:
-                        for box, text_line, score in ocr_res:
-                            clean_l = text_line.strip()
-                            if clean_l:
-                                ocr_text_lines.append(clean_l)
+                        # Cluster OCR boxes into row bands for proper reading order and table layout
+                        boxes = []
+                        for b, t, s in ocr_res:
+                            norm_l = normalize_ocr_line(t)
+                            if norm_l:
+                                ymin = min(pt[1] for pt in b)
+                                ymax = max(pt[1] for pt in b)
+                                xmin = min(pt[0] for pt in b)
+                                xmax = max(pt[0] for pt in b)
+                                boxes.append({
+                                    "box": b,
+                                    "text": norm_l,
+                                    "orig": t,
+                                    "ymin": ymin,
+                                    "ymax": ymax,
+                                    "xmin": xmin,
+                                    "xmax": xmax
+                                })
+                        boxes.sort(key=lambda item: item['ymin'])
+                        rows = []
+                        for b in boxes:
+                            matched_row = None
+                            for r in rows:
+                                r_ymin = min(item['ymin'] for item in r)
+                                r_ymax = max(item['ymax'] for item in r)
+                                b_center = (b['ymin'] + b['ymax']) / 2
+                                if r_ymin - 16 <= b_center <= r_ymax + 16:
+                                    matched_row = r
+                                    break
+                            if matched_row is not None:
+                                matched_row.append(b)
+                            else:
+                                rows.append([b])
+
+                        for r in rows:
+                            r.sort(key=lambda item: item['xmin'])
+                            row_str = " | ".join(item['text'] for item in r)
+                            row_str = re.sub(r'(\+\d{1,4}(?:\(\d{1,4}\))?)\s*\|\s*(\d{3,5}[-.\s]?\d{3,5})', r'\1 \2', row_str)
+                            ocr_text_lines.append(row_str)
+                            for item in r:
+                                page_boxes.append({
+                                    "box": item["box"],
+                                    "text": item["text"],
+                                    "orig": item["orig"]
+                                })
                 except Exception as ex:
                     ocr_text_lines.append(f"[OCR Error: {ex}]")
             page_content = "\n".join(ocr_text_lines)
+            page_content = re.sub(r'(\+\d{1,4}(?:\(\d{1,4}\))?)\s*\n\s*(\d{3,5}[-.\s]?\d{3,5})', r'\1 \2', page_content)
         else:
             page_content = direct_text.strip()
             
@@ -383,7 +627,10 @@ def extract_text_from_pdf(file_bytes: bytes, max_pages: Optional[int] = None) ->
             "section_id": page_num,
             "method": page_method,
             "content": page_content,
-            "was_ocr": is_scanned
+            "was_ocr": is_scanned,
+            "ocr_boxes": page_boxes if is_scanned else [],
+            "image_width": img_w,
+            "image_height": img_h
         })
 
     full_text = "\n".join(lines)
@@ -397,6 +644,7 @@ def extract_text_from_pdf(file_bytes: bytes, max_pages: Optional[int] = None) ->
         "pages_info": pages_info
     }
     return full_text, structural_blocks, meta
+
 
 
 # ==============================================================================
@@ -421,14 +669,41 @@ def is_allowlisted(entity_type: str, matched_text: str) -> bool:
         return True
         
     # 4. Speak Up Hotline
-    if entity_type == "PHONE_NUMBER" and clean in ALLOWLIST_PHONES:
-        return True
+    if entity_type == "PHONE_NUMBER":
+        p_dig = re.sub(r'\D', '', clean)
+        if p_dig in ALLOWLIST_PHONE_DIGITS or clean in ALLOWLIST_PHONES:
+            return True
 
     # 5. Reject version numbers or standalone years (e.g., 2026, 6.0)
     if re.match(r'^(?:19|20)\d{2}$', clean) or re.match(r'^[vV]?\d+\.\d+$', clean):
         return True
+
+    # 6. False-positive corporate roles, titles, functions and departments
+    if entity_type == "PERSON_NAME" and is_role_or_department(clean):
+        return True
         
     return False
+
+
+def resolve_overlapping_spans(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    De-duplicates and merges overlapping entity spans to prevent broken token residues.
+    Preserves outer/longer spans (e.g. +33155550144 over 33155550144, Rosalind Featherstone over Featherstone).
+    """
+    if not entities:
+        return []
+    sorted_ents = sorted(entities, key=lambda x: (x["start"], -(x["end"] - x["start"])))
+    resolved = []
+    for ent in sorted_ents:
+        if not resolved:
+            resolved.append(ent)
+            continue
+        prev = resolved[-1]
+        if ent["start"] < prev["end"]:
+            # Current span overlaps with previous span; skip to avoid collision
+            continue
+        resolved.append(ent)
+    return resolved
 
 
 def detect_pii_entities(text: str, custom_gazetteer: Optional[List[str]] = None, source_format: str = "native") -> List[Dict[str, Any]]:
@@ -495,7 +770,6 @@ def detect_pii_entities(text: str, custom_gazetteer: Optional[List[str]] = None,
             add_entity("SSN", match.group(1), match.start(1), match.end(1), 0.96, "HIGH", "Contextual Last-4 SSN pattern")
 
     for match in REGEX_PATTERNS["PAN_INDIA"].finditer(text):
-        # 4th character entity type check (P for person, C for company, etc.)
         pan_val = match.group()
         if pan_val[3] in "PCAFHT":
             add_entity("PAN_GOV_ID", pan_val, match.start(), match.end(), 0.98, "CRITICAL", "Indian PAN Tax Identifier with entity checksum")
@@ -516,12 +790,14 @@ def detect_pii_entities(text: str, custom_gazetteer: Optional[List[str]] = None,
             add_entity("FINANCIAL_ACCOUNT", match.group(1), match.start(1), match.end(1), 0.95, "CRITICAL", "Payment card / account indicator")
 
     for match in REGEX_PATTERNS["IP_ADDRESS"].finditer(text):
-        # Only flag if in proximity to audit log indicators (user=, auth, etc.)
         add_entity("IP_ADDRESS", match.group(), match.start(), match.end(), 0.90, "MEDIUM", "Terminal / Network IP identifier")
 
     for match in REGEX_PATTERNS["TERMINAL_USER"].finditer(text):
         if match.groups():
-            add_entity("USER_ID", match.group(1), match.start(1), match.end(1), 0.92, "HIGH", "Terminal audit log user identifier")
+            u_val = match.group(1).strip()
+            filter_ops = {"equal", "equals", "contains", "contain", "starts", "ends", "in", "not", "null", "empty", "is", "like", "any", "all", "true", "false", "none", "select", "where", "group", "role", "type", "name", "id", "status"}
+            if u_val.lower() not in filter_ops and len(u_val) >= 3 and not is_role_or_department(u_val):
+                add_entity("USER_ID", u_val, match.start(1), match.end(1), 0.92, "HIGH", "Terminal audit log user identifier")
 
     # Phone numbers: validate digit count (at least 7 digits to avoid dates/version numbers)
     for match in REGEX_PATTERNS["PHONE_NUMBER"].finditer(text):
@@ -553,25 +829,118 @@ def detect_pii_entities(text: str, custom_gazetteer: Optional[List[str]] = None,
         if match.groups():
             add_entity("BANK_ROUTING_CODE", match.group(1), match.start(1), match.end(1), 0.94, "HIGH", "Financial institution routing / SWIFT / BIC identifier")
 
-    # Layer 2: Cadence Personnel & Stakeholder Gazetteer
+    # Layer 2: Cadence Personnel, Table Extraction & Stakeholder Gazetteer
     gazetteer = set(CADENCE_KNOWN_PEOPLE)
     if custom_gazetteer:
         gazetteer.update(custom_gazetteer)
 
-    # Dynamic email-derived name seeds from corporate email local parts
-    for match in re.finditer(r'([A-Za-z]+(?:[._][A-Za-z]+)?)@cadencefg', text, re.IGNORECASE):
+    # Layer 2a: Table Context Awareness (Extract Name & Mobile columns from tables)
+    table_lines = text.splitlines()
+    in_tbl = False
+    col_name_idx = -1
+    col_phone_idx = -1
+    line_offset = 0
+    TABLE_NON_PERSON_WORDS = {
+        "vendor", "vendors", "tier", "category", "system", "attribute", "questionnaire",
+        "question", "score", "scoring", "rule", "action", "control", "risk", "assessment",
+        "training", "policy", "framework", "management", "level", "description", "default",
+        "custom", "template", "workflow", "approver", "collaborator", "lead", "owner",
+        "officer", "manager", "director", "group", "team", "division", "department",
+        "client", "service", "requirement", "condition", "status", "legal", "finance",
+        "privacy", "security", "data", "quality", "compliance", "procurement", "internal",
+        "external", "third-party", "third", "party"
+    }
+
+    for t_line in table_lines:
+        s_line = t_line.strip()
+        if "[TABLE" in s_line and "START" in s_line:
+            in_tbl = True
+            col_name_idx = -1
+            col_phone_idx = -1
+            line_offset += len(t_line) + 1
+            continue
+        elif "[TABLE" in s_line and "END" in s_line:
+            in_tbl = False
+            col_name_idx = -1
+            col_phone_idx = -1
+            line_offset += len(t_line) + 1
+            continue
+        if (in_tbl or (s_line.startswith("|") and s_line.endswith("|"))) and "|" in s_line:
+            cells = [c.strip() for c in s_line.split("|")]
+            if cells and not cells[0]: cells.pop(0)
+            if cells and not cells[-1]: cells.pop(-1)
+
+            # Detect Header Row: must be concise column titles across all columns
+            hdr_found = False
+            if cells and len(cells) >= 2 and all(len(c.split()) <= 6 for c in cells):
+                temp_name_idx = -1
+                temp_phone_idx = -1
+                for c_idx, cell in enumerate(cells):
+                    c_low = cell.lower()
+                    if c_low in {"named contacts", "named contacts by division", "role holder", "contact name", "employee", "person"}:
+                        temp_name_idx = c_idx
+                        hdr_found = True
+                    elif c_low == "name":
+                        other_headers = {cells[i].lower() for i in range(len(cells)) if i != c_idx}
+                        if any(h in other_headers for h in {"mobile", "phone", "tel", "role", "title", "role holder", "division", "email"}):
+                            temp_name_idx = c_idx
+                            hdr_found = True
+                    elif c_low in {"mobile", "phone", "tel", "direct", "telephone"}:
+                        temp_phone_idx = c_idx
+                        hdr_found = True
+                if hdr_found:
+                    col_name_idx = temp_name_idx
+                    col_phone_idx = temp_phone_idx
+                    line_offset += len(t_line) + 1
+                    continue
+
+            # Process Data Row
+            if col_name_idx >= 0 and col_name_idx < len(cells):
+                cand_name = cells[col_name_idx].strip()
+                if cand_name and not is_role_or_department(cand_name):
+                    cand_words = cand_name.lower().split()
+                    if not any(w in TABLE_NON_PERSON_WORDS for w in cand_words):
+                        if re.match(r'^[A-Z][a-z]+(?:-[A-Z][a-z]+)?(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?$', cand_name):
+                            gazetteer.add(cand_name)
+                            c_parts = cand_name.split()
+                            if len(c_parts) >= 2 and len(c_parts[-1]) >= 3 and c_parts[-1].isalpha():
+                                gazetteer.add(c_parts[-1]) # surname
+                                gazetteer.add(f"{c_parts[0][0]}. {c_parts[-1]}")
+
+            if col_phone_idx >= 0 and col_phone_idx < len(cells):
+                cand_phone = cells[col_phone_idx].strip()
+                p_digits = re.sub(r'\D', '', cand_phone)
+                if 7 <= len(p_digits) <= 15 and not is_allowlisted("PHONE_NUMBER", cand_phone):
+                    p_offset = text.find(cand_phone, line_offset)
+                    if p_offset < 0:
+                        p_offset = text.find(cand_phone)
+                    if p_offset >= 0:
+                        add_entity("PHONE_NUMBER", cand_phone, p_offset, p_offset + len(cand_phone), 0.98, "HIGH", "Table mobile column match", scope="personal")
+
+        line_offset += len(t_line) + 1
+
+    # Layer 2b: Dynamic email-derived name seeds
+    for match in re.finditer(r'([A-Za-z]+(?:[._][A-Za-z]+)?)@(?:cadencefg|halloranpike)', text, re.IGNORECASE):
         parts = re.split(r'[._]', match.group(1))
-        if len(parts) == 2 and len(parts[0]) >= 2 and len(parts[1]) >= 2:
-            first_name = parts[0].capitalize()
+        if len(parts) == 2 and len(parts[0]) >= 1 and len(parts[1]) >= 2:
             last_name = parts[1].capitalize()
-            full_name = f"{first_name} {last_name}"
-            gazetteer.add(full_name)
-            gazetteer.add(first_name)
+            # If this surname appears in text preceded by a capitalized first name, register full name
+            for m_full in re.finditer(rf'\b([A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+{re.escape(last_name)}\b', text):
+                full_c = m_full.group()
+                if not is_role_or_department(full_c):
+                    gazetteer.add(full_c)
             gazetteer.add(last_name)
 
+    # Layer 2c: Gazetteer & Discovered Names Scan (sorted by length descending to match full names first)
     sorted_names = sorted(list(gazetteer), key=lambda x: len(x), reverse=True)
     for name in sorted_names:
-        pattern = re.compile(rf'\b{re.escape(name)}\b', re.IGNORECASE)
+        if is_role_or_department(name):
+            continue
+        # Single-word surnames MUST be matched case-sensitively to avoid tokenizing common nouns
+        if len(name.split()) == 1:
+            pattern = re.compile(rf'\b{re.escape(name)}\b')
+        else:
+            pattern = re.compile(rf'\b{re.escape(name)}\b', re.IGNORECASE)
         for match in pattern.finditer(text):
             m_start, m_end = match.start(), match.end()
             if not any(s <= m_start and m_end <= e for s, e in seen_spans):
@@ -583,11 +952,14 @@ def detect_pii_entities(text: str, custom_gazetteer: Optional[List[str]] = None,
             if match.groups():
                 captured = match.group(1).strip()
                 stopwords = {"Officer", "Committee", "Board", "Group", "Financial", "Cadence", "Division", "Department", "Policy"}
-                if captured and not any(w in captured for w in stopwords) and len(captured.split()) >= 2:
+                if captured and not any(w in captured for w in stopwords) and not is_role_or_department(captured) and len(captured.split()) >= 2:
                     c_start = match.start(1)
                     c_end = match.end(1)
                     if not any(s <= c_start and c_end <= e for s, e in seen_spans):
                         add_entity("PERSON_NAME", captured, c_start, c_end, 0.90, "HIGH", "Contextual role-prefixed entity in prose", scope="personal")
+
+    # De-duplicate and resolve any overlapping spans
+    entities = resolve_overlapping_spans(entities)
 
     # Sort entities by starting offset & reindex
     entities.sort(key=lambda x: x["start"])
@@ -608,12 +980,15 @@ def redact_and_sanitize(
 ) -> Tuple[str, Dict[str, str], float]:
     """
     Performs context-preserving redaction using stable HMAC tokens.
+    Guarantees no overlapping slices and right-to-left replacement.
     """
     if not entities:
         return text, {}, 100.0
 
+    # Ensure strictly non-overlapping spans
+    resolved_entities = resolve_overlapping_spans(entities)
     entity_mapping = {}  # original -> token
-    sorted_entities = sorted(entities, key=lambda x: x["start"], reverse=True)
+    sorted_entities = sorted(resolved_entities, key=lambda x: x["start"], reverse=True)
     
     sanitized = text
     for ent in sorted_entities:
@@ -631,20 +1006,165 @@ def redact_and_sanitize(
     return sanitized, entity_mapping, structure_score
 
 
-def verify_sanitized_output(sanitized_text: str) -> Tuple[str, List[Dict[str, Any]]]:
+def verify_sanitized_output(
+    sanitized_text: str,
+    pass1_entities: Optional[List[Dict[str, Any]]] = None
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Fail-Closed Verifier: Re-scans the sanitized text with strict detectors.
-    If any residual PII leaks through, sets status to 'BLOCKED'.
+    Fail-Closed Verifier (Part 1.6):
+    Re-scans sanitized text with independent detectors:
+    1. Broken token fragment checks (ID_xxx], unclosed brackets, spliced tokens).
+    2. Half-redacted name patterns (name words adjacent to tokens).
+    3. Independent strict regexes for phones, emails, employee IDs.
+    4. Pass-1 entity value-hash comparison.
+    Any residual sets status to 'BLOCKED'.
     """
-    residual = detect_pii_entities(sanitized_text)
-    # Filter out tokens themselves
-    true_residuals = [
-        r for r in residual 
-        if not re.match(r'^\[(?:PERSON|EMAIL|PHONE|EMPLOYEE|VENDOR|SSN|PAN|AADHAAR|PESEL|FINANCIAL|CREDIT_CARD|IBAN|BANK_ROUTING|IP|USER|DOB|PASSPORT)_[a-f0-9]+\]$', r['text'])
-    ]
+    residuals = []
 
-    status = "BLOCKED" if len(true_residuals) > 0 else "PASSED"
-    return status, true_residuals
+    # Check 1: Broken Token Fragments & Corrupted Brackets
+    # 1a. Spliced token residue (e.g. [PHONE_NUMBER_xxx]ID_xxx] or [PERSON_NAME_xxx]ID_)
+    spliced_pat = re.compile(r'\[[A-Z0-9_]+_[a-f0-9]+\][A-Za-z0-9_]+\]?')
+    for m in spliced_pat.finditer(sanitized_text):
+        residuals.append({
+            "type": "TOKEN_FRAGMENT",
+            "location": f"char_{m.start()}",
+            "value_hash": hashlib.sha256(m.group().encode()).hexdigest()[:10],
+            "reason": "Spliced token residue"
+        })
+
+    # 1b. Strip all valid tokens and check for orphaned/unclosed token text
+    stripped_tokens = re.sub(r'\[[A-Z0-9_]{3,}_[a-f0-9]{4,12}\]', '', sanitized_text)
+    corrupted_fragments = [
+        (re.compile(r'\bID_[a-f0-9]{4,10}\]'), "Corrupted token suffix fragment"),
+        (re.compile(r'\[[A-Z0-9_]{3,}_[a-f0-9]{4,12}\b'), "Unclosed token bracket"),
+        (re.compile(r'\b[A-Z0-9_]{3,}_[a-f0-9]{4,12}\]'), "Orphaned token bracket")
+    ]
+    for pat, reason in corrupted_fragments:
+        for m in pat.finditer(stripped_tokens):
+            residuals.append({
+                "type": "TOKEN_FRAGMENT",
+                "location": "text_body",
+                "value_hash": hashlib.sha256(m.group().encode()).hexdigest()[:10],
+                "reason": reason
+            })
+
+    # Check 2: Half-Redacted Names (Unredacted person name parts adjacent to person token)
+    name_parts = set()
+    if pass1_entities:
+        for e in pass1_entities:
+            if e.get("type") == "PERSON_NAME":
+                for part in re.split(r'[\s.,-]+', e.get("text", "")):
+                    if len(part) >= 2 and not is_role_or_department(part):
+                        name_parts.add(part.lower())
+    for full in CADENCE_KNOWN_PEOPLE:
+        for part in re.split(r'[\s.,-]+', full):
+            if len(part) >= 2 and not is_role_or_department(part):
+                name_parts.add(part.lower())
+
+    half_name_patterns = [
+        (re.compile(r'\b([A-Z][a-z]{2,})\s+\[PERSON_NAME_[a-f0-9]+\]'), "Unredacted first name adjacent to person token"),
+        (re.compile(r'\[PERSON_NAME_[a-f0-9]+\]\s+([A-Z][a-z]{2,})\b'), "Unredacted surname adjacent to person token")
+    ]
+    for pat, reason in half_name_patterns:
+        for m in pat.finditer(sanitized_text):
+            word = m.group(1)
+            if word.lower() in name_parts and not is_role_or_department(word):
+                residuals.append({
+                    "type": "HALF_REDACTED_NAME",
+                    "location": f"char_{m.start()}",
+                    "value_hash": hashlib.sha256(word.encode()).hexdigest()[:10],
+                    "reason": reason
+                })
+
+    # Strip valid tokens before running independent regex passes
+    clean_for_regex = re.sub(r'\[[A-Za-z0-9_]+\]', ' ', sanitized_text)
+
+    # Check 3: Independent Strict Regex Passes
+    # 3a. Telephony
+    for m in REGEX_PATTERNS["PHONE_NUMBER"].finditer(clean_for_regex):
+        raw = m.group().strip()
+        digits = re.sub(r'\D', '', raw)
+        if 7 <= len(digits) <= 15 and not is_allowlisted("PHONE_NUMBER", raw):
+            residuals.append({
+                "type": "PHONE_NUMBER",
+                "location": f"char_{m.start()}",
+                "value_hash": hashlib.sha256(raw.encode()).hexdigest()[:10],
+                "reason": "Residual unredacted phone number"
+            })
+
+    # 3b. Emails
+    for m in REGEX_PATTERNS["EMAIL"].finditer(clean_for_regex):
+        raw = m.group().strip()
+        if not is_allowlisted("EMAIL", raw):
+            residuals.append({
+                "type": "EMAIL",
+                "location": f"char_{m.start()}",
+                "value_hash": hashlib.sha256(raw.encode()).hexdigest()[:10],
+                "reason": "Residual unredacted email address"
+            })
+
+    # 3c. Employee IDs
+    for m in REGEX_PATTERNS["EMPLOYEE_ID"].finditer(clean_for_regex):
+        raw = m.group().strip()
+        if not is_allowlisted("EMPLOYEE_ID", raw):
+            residuals.append({
+                "type": "EMPLOYEE_ID",
+                "location": f"char_{m.start()}",
+                "value_hash": hashlib.sha256(raw.encode()).hexdigest()[:10],
+                "reason": "Residual unredacted employee ID"
+            })
+
+    # Check 4: Pass-1 Value Hash Comparison
+    if pass1_entities:
+        pass1_hashes = {}
+        for e in pass1_entities:
+            raw_t = e.get("text", "").strip()
+            etype = e.get("type", "")
+            if etype in {"EMAIL", "PHONE_NUMBER", "EMPLOYEE_ID", "SSN", "PAN_GOV_ID", "PESEL_GOV_ID", "PASSPORT"}:
+                pass1_hashes[e["value_hash"]] = etype
+                if raw_t and raw_t in clean_for_regex and not is_allowlisted(etype, raw_t):
+                    residuals.append({
+                        "type": etype,
+                        "location": "text_body",
+                        "value_hash": e["value_hash"],
+                        "reason": f"Residual {etype} found in sanitized text"
+                    })
+            elif etype == "PERSON_NAME" and len(raw_t) >= 4 and not is_role_or_department(raw_t):
+                pass1_hashes[e["value_hash"]] = etype
+                if raw_t and raw_t in clean_for_regex and not is_allowlisted(etype, raw_t):
+                    residuals.append({
+                        "type": etype,
+                        "location": "text_body",
+                        "value_hash": e["value_hash"],
+                        "reason": "Residual PERSON_NAME found in sanitized text"
+                    })
+                c_parts = raw_t.split()
+                if len(c_parts) >= 2:
+                    surname = c_parts[-1]
+                    if len(surname) >= 4 and not is_role_or_department(surname) and surname.isalpha():
+                        if re.search(rf'\b{re.escape(surname)}\b', clean_for_regex) and not is_allowlisted("PERSON_NAME", surname):
+                            s_hash = hashlib.sha256(surname.encode()).hexdigest()[:10]
+                            residuals.append({
+                                "type": "PERSON_NAME",
+                                "location": "text_body",
+                                "value_hash": s_hash,
+                                "reason": "Residual surname matches pass-1 entity hash"
+                            })
+
+        words = re.findall(r'\b[A-Za-z0-9@+.-]{4,}\b', clean_for_regex)
+        for w in words:
+            w_hash = hashlib.sha256(w.encode()).hexdigest()[:10]
+            if w_hash in pass1_hashes and not is_allowlisted(pass1_hashes[w_hash], w):
+                residuals.append({
+                    "type": pass1_hashes[w_hash],
+                    "location": "text_body",
+                    "value_hash": w_hash,
+                    "reason": "Residual value matches pass-1 entity hash"
+                })
+
+    status = "BLOCKED" if len(residuals) > 0 else "PASSED"
+    return status, residuals
+
 
 
 # ==============================================================================
@@ -745,8 +1265,8 @@ def process_document(
     # Redact text using stable HMAC tokens
     sanitized_text, entity_map, structure_score = redact_and_sanitize(raw_text, entities, mode=redaction_mode)
     
-    # Fail-Closed Verification
-    verification_status, residuals = verify_sanitized_output(sanitized_text)
+    # Fail-Closed Verification (stricter re-scan and value hash checking)
+    verification_status, residuals = verify_sanitized_output(sanitized_text, pass1_entities=entities)
 
     # Generate compliance audit log with Appendix E.6 fields
     audit_report = generate_audit_report(
@@ -771,7 +1291,8 @@ def process_document(
         "structure_score": structure_score,
         "recall_coverage": 100.0,
         "audit_report": audit_report,
-        "structural_blocks_count": len(blocks)
+        "structural_blocks_count": len(blocks),
+        "structural_blocks": blocks
     }
 
 
@@ -1070,13 +1591,83 @@ def sanitize_pptx_bytes(
     return out_stream.getvalue()
 
 
+def generate_layout_preserved_redacted_pdf(
+    file_bytes: bytes,
+    entities: Optional[List[Dict[str, Any]]] = None,
+    structural_blocks: Optional[List[Dict[str, Any]]] = None,
+    entity_map: Optional[Dict[str, str]] = None
+) -> bytes:
+    """
+    Layout-preserving PDF redaction (Part 1.5):
+    Preserves original page count and page dimensions.
+    Burns solid black boxes over detected OCR bounding boxes and text.
+    """
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    total_pages = len(doc)
+    
+    redact_texts = set()
+    if entities:
+        for ent in entities:
+            t = ent.get("text", "").strip()
+            if len(t) >= 2:
+                redact_texts.add(t)
+    if entity_map:
+        for orig in entity_map.keys():
+            if len(orig.strip()) >= 2:
+                redact_texts.add(orig.strip())
+
+    for page_idx in range(total_pages):
+        page = doc[page_idx]
+        page_num = page_idx + 1
+
+        # 1. Native text search and redactions
+        for t in redact_texts:
+            rects = page.search_for(t)
+            for r in rects:
+                page.add_redact_annot(r, fill=(0, 0, 0))
+
+        # 2. Scanned / OCR bounding boxes solid black box redaction
+        if structural_blocks:
+            page_block = next((b for b in structural_blocks if b.get("section_id") == page_num and b.get("section_type") == "page"), None)
+            if page_block and page_block.get("ocr_boxes"):
+                img_w = page_block.get("image_width") or page.rect.width
+                img_h = page_block.get("image_height") or page.rect.height
+                scale_x = page.rect.width / max(img_w, 1)
+                scale_y = page.rect.height / max(img_h, 1)
+
+                for obox in page_block.get("ocr_boxes", []):
+                    b_text = obox.get("text", "")
+                    is_hit = False
+                    for t in redact_texts:
+                        if t.lower() in b_text.lower() or b_text.lower() in t.lower():
+                            is_hit = True
+                            break
+                    if is_hit:
+                        coords = obox.get("box", [])
+                        if len(coords) >= 4:
+                            x0 = min(p[0] for p in coords) * scale_x
+                            y0 = min(p[1] for p in coords) * scale_y
+                            x1 = max(p[0] for p in coords) * scale_x
+                            y1 = max(p[1] for p in coords) * scale_y
+                            r = fitz.Rect(max(0, x0 - 2), max(0, y0 - 2), min(page.rect.width, x1 + 2), min(page.rect.height, y1 + 2))
+                            page.add_redact_annot(r, fill=(0, 0, 0))
+
+        page.apply_redactions()
+
+    out_buf = io.BytesIO()
+    doc.save(out_buf)
+    return out_buf.getvalue()
+
+
 def export_sanitized_document(
     filename: str,
     file_bytes: Optional[bytes],
     sanitized_text: str,
     entity_map: Dict[str, str],
     entity_count: int = 0,
-    export_format: Optional[str] = None
+    export_format: Optional[str] = None,
+    entities: Optional[List[Dict[str, Any]]] = None,
+    structural_blocks: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[bytes, str, str]:
     """
     Exports sanitized document matching the exact uploaded format (.pdf, .docx, .pptx, .txt).
@@ -1092,7 +1683,18 @@ def export_sanitized_document(
         target_ext = ".txt"
 
     if target_ext == ".pdf":
-        out_bytes = generate_sanitized_pdf(sanitized_text, filename, entity_count)
+        if file_bytes:
+            try:
+                out_bytes = generate_layout_preserved_redacted_pdf(
+                    file_bytes=file_bytes,
+                    entities=entities,
+                    structural_blocks=structural_blocks,
+                    entity_map=entity_map
+                )
+            except Exception:
+                out_bytes = generate_sanitized_pdf(sanitized_text, filename, entity_count)
+        else:
+            out_bytes = generate_sanitized_pdf(sanitized_text, filename, entity_count)
         out_name = f"SANITIZED_{clean_base}.pdf"
         mime = "application/pdf"
     elif target_ext == ".docx":
@@ -1109,3 +1711,4 @@ def export_sanitized_document(
         mime = "text/plain; charset=utf-8"
 
     return out_bytes, out_name, mime
+

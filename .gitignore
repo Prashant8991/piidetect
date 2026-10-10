@@ -34,3 +34,4 @@ scratch/
 .tempmediaStorage/
 cloudflared.exe
 *.exe
+.hmac_secret

@@ -20,7 +20,13 @@ def raw_tok(t):
 
 @lru_cache(maxsize=8192)
 def is_common_word(token):
-    return zipf_frequency(token, "en") >= COMMON_WORD_ZIPF_MIN
+    freq = zipf_frequency(token, "en")
+    if freq >= COMMON_WORD_ZIPF_MIN:
+        return True
+    if token.endswith("s") and len(token) > 3:
+        if zipf_frequency(token[:-1], "en") >= COMMON_WORD_ZIPF_MIN:
+            return True
+    return False
 
 
 def trim_person(text, s, e):

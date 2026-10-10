@@ -1,437 +1,880 @@
 /**
- * Optiv Consulting - Cadence Financial Group AI Privacy Shield
- * Frontend Application Controller
+ * Cadence PII Shield - Enterprise Compliance Controller
+ * Hash-Routed SPA: #upload, #processing, #results, #audit
+ * Zero emojis, clean state management, fail-closed verification
  */
 
-let currentAnalysisData = null;
-let currentRedactionMode = "tokenization";
-let currentFilter = "ALL";
+// Application State
+const state = {
+    currentRoute: "upload",
+    selectedSample: "pptx", // default sample
+    uploadedFile: null,
+    redactionMode: "tokenization",
+    maxPdfPages: 5,
+    analysisData: null,
+    syncScroll: true,
+    viewMode: "split",
+    filterType: "ALL",
+    filterSource: "ALL",
+    filterSearch: ""
+};
 
 document.addEventListener("DOMContentLoaded", () => {
-    initNavigation();
-    initUploadZone();
-    initSampleTriggers();
-    initSettingsToggles();
-    initExportActions();
-    initLLMGate();
-    initFilterChips();
-    initViewerControls();
-    initSyncScroll();
-    initEntityHoverLinking();
-    
-    // Auto-load PPTX sample on initial visit for immediate wow-factor
-    loadSample("pptx");
+    initRouting();
+    initUploadPage();
+    initProcessingPage();
+    initResultsPage();
+    initAuditPage();
+
+    // Initialize with default hash or #upload
+    const initialHash = window.location.hash.replace("#", "") || "upload";
+    navigateTo(initialHash);
 });
 
 // ==============================================================================
-// 1. NAVIGATION CONTROLLER
+// 1. HASH ROUTING CONTROLLER
 // ==============================================================================
 
-function initNavigation() {
-    const navButtons = document.querySelectorAll(".nav-btn");
-    const tabPanes = document.querySelectorAll(".tab-pane");
+function initRouting() {
+    window.addEventListener("hashchange", () => {
+        const route = window.location.hash.replace("#", "") || "upload";
+        navigateTo(route);
+    });
 
-    navButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-            const targetTab = btn.getAttribute("data-tab");
-            
-            navButtons.forEach(b => b.classList.remove("active"));
-            tabPanes.forEach(p => p.classList.remove("active"));
-
-            btn.classList.add("active");
-            const activePane = document.getElementById(targetTab);
-            if (activePane) {
-                activePane.classList.add("active");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-            }
+    document.querySelectorAll(".nav-link").forEach(link => {
+        link.addEventListener("click", (e) => {
+            const target = link.getAttribute("href").replace("#", "");
+            navigateTo(target);
         });
     });
 }
 
-function switchTab(tabId) {
-    const targetNav = document.querySelector(`.nav-btn[data-tab="${tabId}"]`);
-    if (targetNav) {
-        targetNav.click();
+function navigateTo(route) {
+    const validRoutes = ["upload", "processing", "results", "audit"];
+    if (!validRoutes.includes(route)) {
+        route = "upload";
     }
+    state.currentRoute = route;
+
+    // Update Nav Link Active States
+    document.querySelectorAll(".nav-link").forEach(l => {
+        l.classList.remove("active");
+        if (l.getAttribute("href") === `#${route}`) {
+            l.classList.add("active");
+        }
+    });
+
+    // Update Page Views
+    document.querySelectorAll(".page-view").forEach(p => p.classList.remove("active"));
+    const activePage = document.getElementById(`page-${route}`);
+    if (activePage) {
+        activePage.classList.add("active");
+    }
+
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 // ==============================================================================
-// 2. SAMPLE FILE HANDLERS
+// 2. PAGE 1: UPLOAD & SAMPLES
 // ==============================================================================
 
-function initSampleTriggers() {
-    // Quick sample cards in dashboard
-    document.querySelectorAll(".sample-card").forEach(card => {
+function initUploadPage() {
+    const sampleCards = document.querySelectorAll(".sample-card");
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    const selectedFileBanner = document.getElementById("selectedFileBanner");
+    const selectedFileName = document.getElementById("selectedFileName");
+    const btnClearFile = document.getElementById("btnClearSelectedFile");
+    const btnModeToken = document.getElementById("btnModeToken");
+    const btnModeMask = document.getElementById("btnModeMask");
+    const selectPdfPages = document.getElementById("inputPdfPages");
+    const btnProcess = document.getElementById("btnProcessDocument");
+
+    // Sample card selection
+    sampleCards.forEach(card => {
         card.addEventListener("click", () => {
-            const sampleId = card.getAttribute("data-sample");
-            loadSample(sampleId);
+            sampleCards.forEach(c => c.classList.remove("selected"));
+            card.classList.add("selected");
+            state.selectedSample = card.getAttribute("data-sample");
+            state.uploadedFile = null;
+            if (selectedFileBanner) selectedFileBanner.style.display = "none";
         });
     });
 
-    // Global "Try a Sample" button in header (available on every page)
-    const btnGlobalSample = document.getElementById("btnGlobalSample");
-    const sampleModal = document.getElementById("sampleModal");
-    const modalClose = document.getElementById("modalClose");
+    // Mark default PPTX sample selected
+    const defaultSample = document.getElementById("sampleCardPptx");
+    if (defaultSample) defaultSample.classList.add("selected");
 
-    if (btnGlobalSample && sampleModal) {
-        btnGlobalSample.addEventListener("click", () => {
-            sampleModal.classList.add("active");
-        });
-        
-        modalClose.addEventListener("click", () => {
-            sampleModal.classList.remove("active");
+    // Dropzone triggers
+    if (dropzone && fileInput) {
+        dropzone.addEventListener("click", (e) => {
+            if (e.target !== btnClearFile) fileInput.click();
         });
 
-        sampleModal.addEventListener("click", (e) => {
-            if (e.target === sampleModal) {
-                sampleModal.classList.remove("active");
+        dropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropzone.classList.add("dragover");
+        });
+
+        dropzone.addEventListener("dragleave", () => {
+            dropzone.classList.remove("dragover");
+        });
+
+        dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.classList.remove("dragover");
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelection(e.dataTransfer.files[0]);
             }
         });
 
-        document.querySelectorAll(".modal-sample-item").forEach(item => {
-            item.addEventListener("click", () => {
-                const sampleId = item.getAttribute("data-sample");
-                sampleModal.classList.remove("active");
-                switchTab("tab-dashboard");
-                loadSample(sampleId);
-            });
+        fileInput.addEventListener("change", (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+    }
+
+    if (btnClearFile) {
+        btnClearFile.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.uploadedFile = null;
+            if (fileInput) fileInput.value = "";
+            if (selectedFileBanner) selectedFileBanner.style.display = "none";
+            // Re-select sample card
+            if (defaultSample) {
+                sampleCards.forEach(c => c.classList.remove("selected"));
+                defaultSample.classList.add("selected");
+                state.selectedSample = "pptx";
+            }
+        });
+    }
+
+    // Redaction mode toggle
+    if (btnModeToken && btnModeMask) {
+        btnModeToken.addEventListener("click", () => {
+            btnModeToken.classList.add("active");
+            btnModeMask.classList.remove("active");
+            state.redactionMode = "tokenization";
+        });
+
+        btnModeMask.addEventListener("click", () => {
+            btnModeMask.classList.add("active");
+            btnModeToken.classList.remove("active");
+            state.redactionMode = "masking";
+        });
+    }
+
+    if (selectPdfPages) {
+        selectPdfPages.addEventListener("change", () => {
+            state.maxPdfPages = parseInt(selectPdfPages.value, 10) || 5;
+        });
+    }
+
+    // Run Processing Action
+    if (btnProcess) {
+        btnProcess.addEventListener("click", () => {
+            executeDocumentProcessing();
         });
     }
 }
 
-async function loadSample(sampleId) {
-    showLoading(true, `Analyzing Cadence Evidence: ${sampleId.toUpperCase()}...`, "Executing format parsing, OCR fallback, and multi-layer PII detection");
+function handleFileSelection(file) {
+    const allowed = [".pptx", ".docx", ".pdf", ".txt"];
+    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowed.includes(ext)) {
+        alert(`Unsupported file type '${ext}'. Please upload .pptx, .docx, .pdf, or .txt file.`);
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        alert("File size exceeds 50MB maximum limit.");
+        return;
+    }
+
+    state.uploadedFile = file;
+    state.selectedSample = null;
+    document.querySelectorAll(".sample-card").forEach(c => c.classList.remove("selected"));
+
+    const banner = document.getElementById("selectedFileBanner");
+    const nameEl = document.getElementById("selectedFileName");
+    if (banner && nameEl) {
+        nameEl.textContent = file.name;
+        banner.style.display = "flex";
+    }
+}
+
+async function executeDocumentProcessing() {
+    showLoading(true, "Processing Document", "Executing structural extraction, neural OCR, and multi-layer detection...");
+    navigateTo("processing");
+    resetPipelineStepper();
 
     try {
-        const response = await fetch("/api/process-sample", {
+        let result = null;
+        if (state.uploadedFile) {
+            const formData = new FormData();
+            formData.append("file", state.uploadedFile);
+            formData.append("redaction_mode", state.redactionMode);
+            formData.append("max_pdf_pages", state.maxPdfPages);
+
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.detail || `Upload failed with HTTP ${res.status}`);
+            }
+            result = await res.json();
+        } else {
+            const sampleId = state.selectedSample || "pptx";
+            const res = await fetch("/api/process-sample", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sample_id: sampleId,
+                    redaction_mode: state.redactionMode,
+                    max_pdf_pages: state.maxPdfPages
+                })
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.detail || `Processing sample failed with HTTP ${res.status}`);
+            }
+            result = await res.json();
+        }
+
+        state.analysisData = result;
+        updateGlobalStatus(result);
+        populateProcessingPage(result);
+        populateResultsPage(result);
+        populateAuditPage(result);
+
+        // Auto transition button in processing
+        const btnGoResults = document.getElementById("btnViewResultsFromProcessing");
+        if (btnGoResults) btnGoResults.style.display = "inline-flex";
+
+    } catch (err) {
+        console.error("Processing error:", err);
+        alert(`Error processing document: ${err.message}`);
+        updateStepperFailure(err.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ==============================================================================
+// 3. PAGE 2: PROCESSING
+// ==============================================================================
+
+function initProcessingPage() {
+    const btnGoResults = document.getElementById("btnViewResultsFromProcessing");
+    if (btnGoResults) {
+        btnGoResults.addEventListener("click", () => {
+            navigateTo("results");
+        });
+    }
+}
+
+function resetPipelineStepper() {
+    const steps = ["stepIngest", "stepExtract", "stepOcr", "stepDetect", "stepRedact", "stepVerify"];
+    steps.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove("completed");
+    });
+    const tag = document.getElementById("pipelineStatusTag");
+    if (tag) {
+        tag.className = "status-tag status-neutral";
+        tag.textContent = "Processing In Progress";
+    }
+}
+
+function populateProcessingPage(data) {
+    const emptyState = document.getElementById("procEmptyState");
+    const summaryCard = document.getElementById("procSummaryCard");
+    if (emptyState) emptyState.style.display = "none";
+    if (summaryCard) summaryCard.style.display = "block";
+
+    // Mark all steps completed
+    const steps = ["stepIngest", "stepExtract", "stepOcr", "stepDetect", "stepRedact", "stepVerify"];
+    steps.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add("completed");
+    });
+
+    const statusMap = {
+        "statusIngest": "Validated",
+        "statusExtract": `${data.entities ? data.entities.length : 0} Blocks`,
+        "statusOcr": data.metadata?.ocr_activated ? "RapidOCR Triggered" : "Native Text Layer",
+        "statusDetect": `${data.entity_count || 0} Entities Found`,
+        "statusRedact": "Sanitized Stream Generated",
+        "statusVerify": data.verification_status === "PASSED" ? "Passed (0 Residuals)" : "Blocked"
+    };
+
+    Object.entries(statusMap).forEach(([id, text]) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    });
+
+    const tag = document.getElementById("pipelineStatusTag");
+    if (tag) {
+        if (data.verification_status === "PASSED") {
+            tag.className = "status-tag status-success";
+            tag.textContent = "All Stages Complete - Passed";
+        } else {
+            tag.className = "status-tag status-danger";
+            tag.textContent = "Verification Failed - Blocked";
+        }
+    }
+
+    // Document Metadata Details
+    const docName = document.getElementById("procDocName");
+    const docFormat = document.getElementById("procDocFormat");
+    const docMethod = document.getElementById("procExtractionMethod");
+    const docVerify = document.getElementById("procVerifyResult");
+
+    if (docName) docName.textContent = data.filename || "Unknown";
+    if (docFormat) docFormat.textContent = (data.metadata?.format || "document").toUpperCase();
+    if (docMethod) docMethod.textContent = data.metadata?.extraction_method || "Native";
+    if (docVerify) {
+        docVerify.textContent = data.verification_status === "PASSED" ? "Passed (0 Residuals)" : "Blocked (Residuals Detected)";
+        docVerify.style.color = data.verification_status === "PASSED" ? "var(--color-success-text)" : "var(--color-danger-text)";
+    }
+
+    // PDF Per-Page Ingestion Table
+    const pdfCard = document.getElementById("procPdfPagesCard");
+    const tbody = document.getElementById("tbodyPdfPages");
+    if (pdfCard && tbody) {
+        if (data.metadata?.pages_info && data.metadata.pages_info.length > 0) {
+            pdfCard.style.display = "block";
+            tbody.innerHTML = data.metadata.pages_info.map(p => `
+                <tr>
+                    <td>Page ${p.page}</td>
+                    <td><span class="format-tag ${p.method === 'ocr' ? 'tag-pdf' : 'tag-docx'}">${p.method === 'ocr' ? 'RapidOCR Neural' : 'Native Text'}</span></td>
+                    <td><span class="status-tag status-success">Extracted</span></td>
+                    <td>${p.method === 'ocr' ? 'Bounding Coordinates Logged' : 'Direct Layout Run'}</td>
+                </tr>
+            `).join("");
+        } else {
+            pdfCard.style.display = "none";
+        }
+    }
+}
+
+function updateStepperFailure(msg) {
+    const tag = document.getElementById("pipelineStatusTag");
+    if (tag) {
+        tag.className = "status-tag status-danger";
+        tag.textContent = "Execution Error";
+    }
+    const docVerify = document.getElementById("procVerifyResult");
+    if (docVerify) {
+        docVerify.textContent = `Error: ${msg}`;
+        docVerify.style.color = "var(--color-danger-text)";
+    }
+}
+
+// ==============================================================================
+// 4. PAGE 3: RESULTS (Two-Pane Dual Viewer)
+// ==============================================================================
+
+function initResultsPage() {
+    const btnViewSplit = document.getElementById("btnViewSplit");
+    const btnViewSanitized = document.getElementById("btnViewSanitized");
+    const btnViewRaw = document.getElementById("btnViewRaw");
+    const btnSyncScroll = document.getElementById("btnToggleSyncScroll");
+    const searchInput = document.getElementById("viewerSearchInput");
+    const btnCopyStream = document.getElementById("btnCopyStream");
+    const btnDownloadSanitized = document.getElementById("btnDownloadSanitized");
+    const btnDownloadTxt = document.getElementById("btnDownloadTxt");
+
+    // View modes
+    const viewButtons = [btnViewSplit, btnViewSanitized, btnViewRaw];
+    viewButtons.forEach(btn => {
+        if (!btn) return;
+        btn.addEventListener("click", () => {
+            viewButtons.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const mode = btn.getAttribute("data-view");
+            state.viewMode = mode;
+
+            const viewer = document.getElementById("dualViewer");
+            if (viewer) {
+                viewer.className = `dual-viewer-container mode-${mode}`;
+            }
+        });
+    });
+
+    // Synchronized Scrolling
+    if (btnSyncScroll) {
+        btnSyncScroll.addEventListener("click", () => {
+            state.syncScroll = !state.syncScroll;
+            btnSyncScroll.classList.toggle("active", state.syncScroll);
+            btnSyncScroll.textContent = `Sync Scroll: ${state.syncScroll ? 'ON' : 'OFF'}`;
+        });
+    }
+
+    const contentRaw = document.getElementById("contentRaw");
+    const contentSanitized = document.getElementById("contentSanitized");
+    const gutterRaw = document.getElementById("gutterRaw");
+    const gutterSanitized = document.getElementById("gutterSanitized");
+
+    let isSyncingScroll = false;
+    if (contentRaw && contentSanitized) {
+        contentRaw.addEventListener("scroll", () => {
+            if (gutterRaw) gutterRaw.scrollTop = contentRaw.scrollTop;
+            if (state.syncScroll && !isSyncingScroll) {
+                isSyncingScroll = true;
+                const ratio = contentRaw.scrollTop / (contentRaw.scrollHeight - contentRaw.clientHeight || 1);
+                contentSanitized.scrollTop = ratio * (contentSanitized.scrollHeight - contentSanitized.clientHeight || 1);
+                if (gutterSanitized) gutterSanitized.scrollTop = contentSanitized.scrollTop;
+                isSyncingScroll = false;
+            }
+        });
+
+        contentSanitized.addEventListener("scroll", () => {
+            if (gutterSanitized) gutterSanitized.scrollTop = contentSanitized.scrollTop;
+            if (state.syncScroll && !isSyncingScroll) {
+                isSyncingScroll = true;
+                const ratio = contentSanitized.scrollTop / (contentSanitized.scrollHeight - contentSanitized.clientHeight || 1);
+                contentRaw.scrollTop = ratio * (contentRaw.scrollHeight - contentRaw.clientHeight || 1);
+                if (gutterRaw) gutterRaw.scrollTop = contentRaw.scrollTop;
+                isSyncingScroll = false;
+            }
+        });
+    }
+
+    // Search filter across panes
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            applyViewerSearch(searchInput.value.trim());
+        });
+    }
+
+    // Copy stream button
+    if (btnCopyStream) {
+        btnCopyStream.addEventListener("click", () => {
+            if (state.analysisData && state.analysisData.sanitized_text) {
+                navigator.clipboard.writeText(state.analysisData.sanitized_text).then(() => {
+                    const origText = btnCopyStream.textContent;
+                    btnCopyStream.textContent = "Copied!";
+                    setTimeout(() => { btnCopyStream.textContent = origText; }, 2000);
+                });
+            }
+        });
+    }
+
+    // Download actions
+    if (btnDownloadSanitized) {
+        btnDownloadSanitized.addEventListener("click", () => {
+            downloadRedactedDocument("native");
+        });
+    }
+
+    if (btnDownloadTxt) {
+        btnDownloadTxt.addEventListener("click", () => {
+            downloadRedactedDocument("txt");
+        });
+    }
+}
+
+function populateResultsPage(data) {
+    // Ribbon Header Real Counts
+    const ribbonRaw = document.getElementById("ribbonRawCount");
+    const ribbonTransform = document.getElementById("ribbonTransformMethod");
+    const ribbonVerify = document.getElementById("ribbonVerifyStatus");
+
+    if (ribbonRaw) ribbonRaw.textContent = `${data.entity_count || 0} Entities Detected`;
+    if (ribbonTransform) {
+        ribbonTransform.textContent = state.redactionMode === "tokenization" 
+            ? "Deterministic HMAC-SHA256 Tokenization" 
+            : "Full Solid Box Masking";
+    }
+    if (ribbonVerify) {
+        if (data.verification_status === "PASSED") {
+            ribbonVerify.className = "ribbon-val ribbon-success";
+            ribbonVerify.textContent = "0 Residual Findings • Passed";
+        } else {
+            const count = data.audit_report?.residuals?.length || 1;
+            ribbonVerify.className = "ribbon-val ribbon-danger";
+            ribbonVerify.textContent = `${count} Residual Findings • Blocked`;
+        }
+    }
+
+    // Left Pane (Raw)
+    const rawBadge = document.getElementById("rawFormatBadge");
+    const rawExp = document.getElementById("rawExposureCount");
+    const contentRaw = document.getElementById("contentRaw");
+    const gutterRaw = document.getElementById("gutterRaw");
+
+    if (rawBadge) rawBadge.textContent = (data.metadata?.format || "DOC").toUpperCase();
+    if (rawExp) rawExp.textContent = `${data.entity_count || 0} PII Exposures`;
+    if (contentRaw) {
+        contentRaw.innerHTML = renderAnnotatedRawText(data.raw_text || "", data.entities || []);
+    }
+    if (gutterRaw && contentRaw) {
+        generateLineGutter(gutterRaw, data.raw_text || "");
+    }
+
+    // Right Pane (Sanitized)
+    const gateTag = document.getElementById("sanitizedGateTag");
+    const tokenBadge = document.getElementById("sanitizedTokenCount");
+    const contentSanitized = document.getElementById("contentSanitized");
+    const gutterSanitized = document.getElementById("gutterSanitized");
+
+    if (gateTag) {
+        gateTag.className = data.verification_status === "PASSED" 
+            ? "tag-status-small tag-status-success" 
+            : "tag-status-small tag-status-danger";
+        gateTag.textContent = data.verification_status;
+    }
+    if (tokenBadge) {
+        tokenBadge.textContent = `${Object.keys(data.entity_map || {}).length} Tokens`;
+    }
+    if (contentSanitized) {
+        contentSanitized.innerHTML = renderAnnotatedSanitizedText(data.sanitized_text || "");
+    }
+    if (gutterSanitized && contentSanitized) {
+        generateLineGutter(gutterSanitized, data.sanitized_text || "");
+    }
+}
+
+function renderAnnotatedRawText(rawText, entities) {
+    if (!rawText) return "No raw artifact text available.";
+    let safe = escapeHtml(rawText);
+
+    // Render Slide and Page banners
+    safe = safe.replace(/--- \[SLIDE (\d+)\] ---/g, '<span class="stream-banner slide">Slide $1</span>');
+    safe = safe.replace(/--- \[PAGE (\d+)\] ---/g, '<span class="stream-banner page">Page $1</span>');
+    safe = safe.replace(/--- \[METADATA\] ---/g, '<span class="stream-banner metadata">Document Metadata</span>');
+
+    return safe;
+}
+
+function renderAnnotatedSanitizedText(sanitizedText) {
+    if (!sanitizedText) return "No sanitized stream available.";
+    let safe = escapeHtml(sanitizedText);
+
+    // Format Tokens with square-cornered chips
+    safe = safe.replace(/(\[[A-Z0-9_]{3,}_[a-f0-9]{4,12}\])/g, '<span class="sanitized-token-chip">$1</span>');
+
+    // Format Banners
+    safe = safe.replace(/--- \[SLIDE (\d+)\] ---/g, '<span class="stream-banner slide">Slide $1</span>');
+    safe = safe.replace(/--- \[PAGE (\d+)\] ---/g, '<span class="stream-banner page">Page $1</span>');
+    safe = safe.replace(/--- \[METADATA\] ---/g, '<span class="stream-banner metadata">Document Metadata</span>');
+
+    return safe;
+}
+
+function generateLineGutter(gutterEl, text) {
+    const lineCount = (text.match(/\n/g) || []).length + 1;
+    let numbers = "";
+    for (let i = 1; i <= lineCount; i++) {
+        numbers += `${i}\n`;
+    }
+    gutterEl.textContent = numbers;
+}
+
+function applyViewerSearch(query) {
+    const rawEl = document.getElementById("contentRaw");
+    const sanEl = document.getElementById("contentSanitized");
+    if (!state.analysisData) return;
+
+    if (!query) {
+        populateResultsPage(state.analysisData);
+        return;
+    }
+
+    const reg = new RegExp(`(${escapeRegex(query)})`, "gi");
+    if (rawEl) {
+        const rawAnnotated = renderAnnotatedRawText(state.analysisData.raw_text || "", state.analysisData.entities || []);
+        rawEl.innerHTML = rawAnnotated.replace(reg, '<mark style="background-color: #FEF08A; color: #854D0E;">$1</mark>');
+    }
+    if (sanEl) {
+        const sanAnnotated = renderAnnotatedSanitizedText(state.analysisData.sanitized_text || "");
+        sanEl.innerHTML = sanAnnotated.replace(reg, '<mark style="background-color: #FEF08A; color: #854D0E;">$1</mark>');
+    }
+}
+
+async function downloadRedactedDocument(exportFormat) {
+    if (!state.analysisData) {
+        alert("No processed document available to download.");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/download-redacted", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                sample_id: sampleId,
-                redaction_mode: currentRedactionMode,
-                max_pdf_pages: 5
+                filename: state.analysisData.filename,
+                sanitized_text: state.analysisData.sanitized_text,
+                export_format: exportFormat
             })
         });
 
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${await response.text()}`);
+        if (!res.ok) {
+            throw new Error(`Download failed with status ${res.status}`);
         }
 
-        const data = await response.json();
-        currentAnalysisData = data;
-        renderAnalysisResults(data);
+        const blob = await res.blob();
+        const disp = res.headers.get("Content-Disposition");
+        let filename = state.analysisData.filename;
+        if (disp && disp.includes("filename=")) {
+            filename = disp.split("filename=")[1].replace(/["']/g, "").trim();
+        } else if (exportFormat === "txt") {
+            filename = filename.replace(/\.[^/.]+$/, "") + "_REDACTED.txt";
+        }
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     } catch (err) {
-        alert("Failed to process sample: " + err.message);
-    } finally {
-        showLoading(false);
+        alert(`Error downloading redacted file: ${err.message}`);
     }
 }
 
 // ==============================================================================
-// 3. FILE UPLOAD CONTROLLER
+// 5. PAGE 4: FINDINGS & AUDIT
 // ==============================================================================
 
-function initUploadZone() {
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
+function initAuditPage() {
+    const filterType = document.getElementById("filterEntityType");
+    const filterSource = document.getElementById("filterSource");
+    const filterSearch = document.getElementById("filterSearch");
+    const btnExportJson = document.getElementById("btnExportAuditJson");
+    const btnExportCsv = document.getElementById("btnExportAuditCsv");
 
-    if (!dropzone || !fileInput) return;
+    if (filterType) {
+        filterType.addEventListener("change", () => {
+            state.filterType = filterType.value;
+            renderAuditFindingsTable();
+        });
+    }
 
-    dropzone.addEventListener("click", () => fileInput.click());
+    if (filterSource) {
+        filterSource.addEventListener("change", () => {
+            state.filterSource = filterSource.value;
+            renderAuditFindingsTable();
+        });
+    }
 
-    dropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.classList.add("dragover");
-    });
+    if (filterSearch) {
+        filterSearch.addEventListener("input", () => {
+            state.filterSearch = filterSearch.value.trim().toLowerCase();
+            renderAuditFindingsTable();
+        });
+    }
 
-    dropzone.addEventListener("dragleave", () => {
-        dropzone.classList.remove("dragover");
-    });
+    if (btnExportJson) {
+        btnExportJson.addEventListener("click", () => {
+            exportAuditReport("json");
+        });
+    }
 
-    dropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.classList.remove("dragover");
-        if (e.dataTransfer.files.length > 0) {
-            uploadFile(e.dataTransfer.files[0]);
-        }
-    });
-
-    fileInput.addEventListener("change", () => {
-        if (fileInput.files.length > 0) {
-            uploadFile(fileInput.files[0]);
-        }
-    });
+    if (btnExportCsv) {
+        btnExportCsv.addEventListener("click", () => {
+            exportAuditReport("csv");
+        });
+    }
 }
 
-async function uploadFile(file) {
-    showLoading(true, `Uploading & Analyzing: ${file.name}...`, "Extracting text structure, scanning metadata, and evaluating PII exposure");
+function populateAuditPage(data) {
+    // Metric summaries
+    const mTotal = document.getElementById("auditMetricTotal");
+    const mNames = document.getElementById("auditMetricNames");
+    const mContacts = document.getElementById("auditMetricContacts");
+    const mIds = document.getElementById("auditMetricIds");
+    const mStructure = document.getElementById("auditMetricStructure");
+    const mStatus = document.getElementById("auditMetricStatus");
+    const mResidualCount = document.getElementById("auditMetricResidualCount");
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("redaction_mode", currentRedactionMode);
-    formData.append("max_pdf_pages", "5");
+    const entities = data.entities || [];
+    const nameCount = entities.filter(e => e.type === "PERSON_NAME").length;
+    const contactCount = entities.filter(e => e.type === "EMAIL" || e.type === "PHONE_NUMBER").length;
+    const idCount = entities.filter(e => ["EMPLOYEE_ID", "USER_ID", "CONTRACT_OP_ID", "SSN", "PAN_GOV_ID", "PESEL_GOV_ID"].includes(e.type)).length;
+
+    if (mTotal) mTotal.textContent = data.entity_count || 0;
+    if (mNames) mNames.textContent = nameCount;
+    if (mContacts) mContacts.textContent = contactCount;
+    if (mIds) mIds.textContent = idCount;
+    if (mStructure) mStructure.textContent = `${data.structure_score || 100}%`;
+    if (mStatus) {
+        mStatus.textContent = data.verification_status;
+        mStatus.style.color = data.verification_status === "PASSED" ? "var(--color-success-text)" : "var(--color-danger-text)";
+    }
+
+    const residuals = data.audit_report?.residuals || [];
+    if (mResidualCount) {
+        mResidualCount.textContent = `${residuals.length} residual findings`;
+    }
+
+    // Residuals Alert Box
+    const resBadge = document.getElementById("auditVerificationBadge");
+    const resContainer = document.getElementById("residualsContainer");
+
+    if (resBadge) {
+        resBadge.className = data.verification_status === "PASSED" ? "status-tag status-success" : "status-tag status-danger";
+        resBadge.textContent = data.verification_status;
+    }
+
+    if (resContainer) {
+        if (residuals.length === 0) {
+            resContainer.innerHTML = '<p class="text-muted" style="padding: 0.5rem 0;">Zero residual findings detected across independent regex passes, token fragmentation tests, and pass-1 value hash checks. Status: PASSED.</p>';
+        } else {
+            resContainer.innerHTML = `
+                <div style="color: var(--color-danger-text); font-weight: 600; margin-bottom: 0.5rem;">
+                    Fail-Closed Policy Violation: ${residuals.length} residual credential(s) detected. Document release is BLOCKED.
+                </div>
+                <table class="residuals-table">
+                    <thead>
+                        <tr>
+                            <th>Residual Type</th>
+                            <th>Location</th>
+                            <th>Value Hash</th>
+                            <th>Detection Justification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${residuals.map(r => `
+                            <tr>
+                                <td><span class="status-tag status-danger">${escapeHtml(r.type)}</span></td>
+                                <td>${escapeHtml(r.location)}</td>
+                                <td><code>${escapeHtml(r.value_hash)}</code></td>
+                                <td>${escapeHtml(r.reason)}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            `;
+        }
+    }
+
+    renderAuditFindingsTable();
+}
+
+function renderAuditFindingsTable() {
+    const tbody = document.getElementById("tbodyFindings");
+    if (!tbody || !state.analysisData) return;
+
+    let findings = state.analysisData.audit_report?.detailed_findings || state.analysisData.entities || [];
+
+    // Filter by type
+    if (state.filterType !== "ALL") {
+        if (state.filterType === "OTHER") {
+            const common = ["PERSON_NAME", "EMAIL", "PHONE_NUMBER", "EMPLOYEE_ID", "USER_ID"];
+            findings = findings.filter(f => !common.includes(f.type));
+        } else {
+            findings = findings.filter(f => f.type === state.filterType);
+        }
+    }
+
+    // Filter by source
+    if (state.filterSource !== "ALL") {
+        findings = findings.filter(f => (f.source || "native").toLowerCase() === state.filterSource);
+    }
+
+    // Search filter
+    if (state.filterSearch) {
+        findings = findings.filter(f => {
+            const token = (f.token || "").toLowerCase();
+            const hash = (f.value_hash || "").toLowerCase();
+            const reason = (f.reason || "").toLowerCase();
+            return token.includes(state.filterSearch) || hash.includes(state.filterSearch) || reason.includes(state.filterSearch);
+        });
+    }
+
+    if (findings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem;">No matching findings for the selected filter criteria.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = findings.map(f => `
+        <tr>
+            <td><code>#${f.id}</code></td>
+            <td><span class="legend-tag tag-control-id">${escapeHtml(f.type)}</span></td>
+            <td><span class="sanitized-token-chip">${escapeHtml(f.token || "-")}</span></td>
+            <td><code>${escapeHtml(f.value_hash || "-")}</code></td>
+            <td><span class="format-tag ${(f.source || 'native') === 'ocr' ? 'tag-pdf' : 'tag-docx'}">${escapeHtml(f.source || "native")}</span></td>
+            <td><span class="status-tag ${f.severity === 'CRITICAL' ? 'status-danger' : 'status-neutral'}">${escapeHtml(f.severity || "HIGH")}</span></td>
+            <td>${Math.round((f.confidence || 0.95) * 100)}%</td>
+            <td style="font-size: 0.78rem;">${escapeHtml(f.reason || "Contextual rule match")}</td>
+        </tr>
+    `).join("");
+}
+
+async function exportAuditReport(format) {
+    if (!state.analysisData) {
+        alert("No audit data available to export.");
+        return;
+    }
 
     try {
-        const response = await fetch("/api/upload", {
+        const res = await fetch("/api/export-audit", {
             method: "POST",
-            body: formData
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                filename: state.analysisData.filename,
+                audit_report: state.analysisData.audit_report,
+                export_format: format
+            })
         });
 
-        if (!response.ok) {
-            throw new Error(`Upload error: ${await response.text()}`);
-        }
+        if (!res.ok) throw new Error(`Export failed with HTTP ${res.status}`);
 
-        const data = await response.json();
-        currentAnalysisData = data;
-        renderAnalysisResults(data);
+        const blob = await res.blob();
+        const baseName = state.analysisData.filename.replace(/\.[^/.]+$/, "");
+        const ext = format === "csv" ? "csv" : "json";
+        const downloadName = `AUDIT_EXPOSURE_REPORT_${baseName}.${ext}`;
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = downloadName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     } catch (err) {
-        alert("File processing failed: " + err.message);
-    } finally {
-        showLoading(false);
+        alert(`Error exporting audit: ${err.message}`);
     }
 }
 
 // ==============================================================================
-// 4. RENDERING & UI UPDATES
+// 6. UTILITIES & HELPERS
 // ==============================================================================
 
-function renderAnalysisResults(data) {
-    // 1. Update Metrics Ribbon
-    document.getElementById("metricPiiCount").textContent = data.entity_count;
-    document.getElementById("metricStructureScore").textContent = `${data.structure_score}%`;
-    document.getElementById("metricRecallScore").textContent = `${data.recall_coverage}%`;
-    
-    const ocrBadge = document.getElementById("metricOcrStatus");
-    if (data.metadata && data.metadata.ocr_activated) {
-        ocrBadge.textContent = "RapidOCR";
-        ocrBadge.style.color = "var(--accent-amber)";
-    } else {
-        ocrBadge.textContent = "Native XML";
-        ocrBadge.style.color = "var(--accent-cyan)";
-    }
+function updateGlobalStatus(data) {
+    const dot = document.getElementById("headerStatusDot");
+    const nameEl = document.getElementById("headerDocName");
 
-    // 2. Update Pipeline Stepper (All 7 Stages)
-    updateStepper(data);
-
-    // 3. Update LLM Safe Gate Card
-    updateLLMGate(data);
-
-    // 4. Update Appendix E.6 Forensic Rubric Card
-    updateAppendixE6(data);
-
-    // 5. Render Raw Text with Enhanced PII Chips & Structural Banners
-    const rawPane = document.getElementById("paneRawText");
-    rawPane.innerHTML = formatRawStreamWithChips(data.raw_text, data.entities);
-
-    // 6. Render Sanitized LLM-Ready Text with Cryptographic Token Badges
-    const sanitizedPane = document.getElementById("paneSanitizedText");
-    sanitizedPane.innerHTML = formatSanitizedStream(data.sanitized_text, data.entities);
-
-    // 7. Update Diff Comparison Ribbon & Chrome Badges
-    updateViewerDiffRibbon(data);
-
-    // 8. Update Line Numbers Gutters
-    updateGutters();
-
-    // 9. Rebind Interactive Hover Linking
-    bindEntityHoverListeners();
-
-    // 10. Update Current File Badge
-    document.getElementById("currentFileName").textContent = data.filename;
-
-    // 10b. Update Sanitized Download Button to match file extension
-    const fileExt = (data.filename.split('.').pop() || 'txt').toLowerCase();
-    const btnLabel = document.getElementById("btnDownloadSanitizedLabel");
-    if (btnLabel) {
-        btnLabel.textContent = `Download Sanitized (.${fileExt})`;
-    }
-
-    // 11. Update Filter Counts and Render Detailed Findings Table
-    updateFilterCounts(data.entities);
-    renderFindingsTable(data.entities, currentFilter);
-}
-
-function updateStepper(data) {
-    const isPdf = data.file_format === ".pdf";
-    const isDocx = data.file_format === ".docx";
-    const isPptx = data.file_format === ".pptx";
-    
-    document.getElementById("step-ingest-meta").textContent = `${data.file_format.toUpperCase()} Sniffed`;
-    document.getElementById("step-extract-meta").textContent = `${data.structure_score}% Retained`;
-    
-    if (data.metadata && data.metadata.ocr_activated) {
-        document.getElementById("step-ocr-meta").textContent = `${data.metadata.scanned_pages || 5} pgs OCRed`;
-    } else {
-        document.getElementById("step-ocr-meta").textContent = "Native Pass (Skipped)";
-    }
-
-    document.getElementById("step-detect-meta").textContent = `${data.entity_count} Entities Detected`;
-    document.getElementById("step-resolve-meta").textContent = "HMAC Tokens Active";
-    document.getElementById("step-redact-meta").textContent = currentRedactionMode === "tokenization" ? "Tokenized Stream" : "Masked Stream";
-    
-    const verifyBadge = document.getElementById("stepperStatusBadge");
-    const verifyText = document.getElementById("stepperStatusText");
-    const verifyMeta = document.getElementById("step-verify-meta");
-
-    if (data.verification_status === "PASSED") {
-        verifyBadge.className = "stepper-status-badge";
-        verifyBadge.style.background = "rgba(16, 185, 129, 0.12)";
-        verifyBadge.style.borderColor = "rgba(16, 185, 129, 0.35)";
-        verifyBadge.style.color = "var(--accent-emerald)";
-        verifyText.textContent = "PASSED: ZERO RESIDUAL PII TO LLM";
-        verifyMeta.textContent = "PASSED (0 Residual)";
-    } else {
-        verifyBadge.className = "stepper-status-badge";
-        verifyBadge.style.background = "rgba(244, 63, 94, 0.15)";
-        verifyBadge.style.borderColor = "var(--accent-rose)";
-        verifyBadge.style.color = "var(--accent-rose)";
-        verifyText.textContent = "BLOCKED: RESIDUAL DETECTED";
-        verifyMeta.textContent = "FAIL-CLOSED BLOCKED";
+    if (dot && nameEl) {
+        dot.className = "status-indicator-dot";
+        if (data.verification_status === "PASSED") {
+            dot.classList.add("active-passed");
+            nameEl.textContent = `${data.filename} (Passed)`;
+        } else {
+            dot.classList.add("active-blocked");
+            nameEl.textContent = `${data.filename} (Blocked)`;
+        }
     }
 }
 
-function updateLLMGate(data) {
-    const gatePill = document.getElementById("llmGateStatus");
-    const gateLabel = document.getElementById("gateStatusLabel");
-    const responseBox = document.getElementById("agentResponseBox");
+function showLoading(show, title = "Processing Document", subtitle = "Extracting text and scanning for PII...") {
+    const overlay = document.getElementById("loadingOverlay");
+    const titleEl = document.getElementById("loadingTitle");
+    const subEl = document.getElementById("loadingSubtitle");
 
-    if (data.verification_status === "PASSED") {
-        gatePill.className = "gate-status-pill passed";
-        gateLabel.textContent = "GATE: PASSED (ZERO PII REACHES LLM)";
-        responseBox.innerHTML = `<div class="agent-response-placeholder">Ready for AI querying. Document verified safe under Cadence Generative AI Policy. Click <strong>"Send to LLM"</strong> or a prompt chip above.</div>`;
-    } else {
-        gatePill.className = "gate-status-pill blocked";
-        gateLabel.textContent = "GATE: BLOCKED (POLICY VIOLATION)";
-        responseBox.innerHTML = `<div style="color: var(--accent-rose); padding: 1rem; text-align: center; font-weight: 600;">⛔ POLICY BLOCK: Residual PII identified. Downstream LLM dispatch is strictly prohibited until sanitized.</div>`;
+    if (overlay) {
+        overlay.style.display = show ? "flex" : "none";
+        if (titleEl) titleEl.textContent = title;
+        if (subEl) subEl.textContent = subtitle;
     }
-}
-
-function updateAppendixE6(data) {
-    const e6 = data.audit_report ? data.audit_report.appendix_e6_metrics : null;
-    
-    // Exercise 1: Scanned pages
-    const ocrStat = document.getElementById("e6StatOcrPages");
-    if (data.file_format === ".pdf") {
-        ocrStat.textContent = "35 of 35 pages (Scanned OCR)";
-        ocrStat.style.color = "var(--accent-amber)";
-    } else {
-        ocrStat.textContent = "Native XML (0 Scanned Pages)";
-        ocrStat.style.color = "var(--accent-cyan)";
-    }
-
-    // Exercise 3: Image-only recall
-    const imgStat = document.getElementById("e6StatImageRecall");
-    if (e6 && e6.exercise_3_image_only_recall) {
-        imgStat.textContent = `${e6.exercise_3_image_only_recall} via OCR`;
-    } else {
-        imgStat.textContent = data.file_format === ".pdf" ? "100.0% via OCR" : "Native Text Stream";
-    }
-
-    // Exercise 5: Token consistency
-    const tokenStat = document.getElementById("e6StatStableTokens");
-    tokenStat.textContent = "HMAC-SHA256 Deterministic Salt";
-
-    // Exercise 6: False positive controls
-    const allowStat = document.getElementById("e6StatAllowlist");
-    allowStat.textContent = "Active (GRP-POL, RSK, ISS, hotline)";
-}
-
-function initLLMGate() {
-    const btnAsk = document.getElementById("btnAskAgent");
-    const queryInput = document.getElementById("agentQueryInput");
-    const responseBox = document.getElementById("agentResponseBox");
-
-    // Chips click
-    document.querySelectorAll(".prompt-chip").forEach(chip => {
-        chip.addEventListener("click", () => {
-            const query = chip.getAttribute("data-query");
-            if (queryInput) {
-                queryInput.value = query;
-                if (btnAsk) btnAsk.click();
-            }
-        });
-    });
-
-    if (btnAsk && queryInput) {
-        btnAsk.addEventListener("click", async () => {
-            if (!currentAnalysisData) return alert("Please select or upload a document first.");
-            
-            const question = queryInput.value.trim();
-            if (!question) return;
-
-            responseBox.innerHTML = `<div style="text-align: center; color: var(--accent-cyan); padding: 1.5rem;">🤖 Generating safe AI reasoning over pseudonymized tokens...</div>`;
-
-            try {
-                const response = await fetch("/api/ask-agent", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        filename: currentAnalysisData.filename,
-                        sanitized_text: currentAnalysisData.sanitized_text,
-                        verification_status: currentAnalysisData.verification_status,
-                        question: question
-                    })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    responseBox.innerHTML = `<div style="color: var(--accent-rose); padding: 1rem; font-weight: 600;">⛔ ${escapeHtml(err.detail || "Request rejected by Cadence AI Gate.")}</div>`;
-                    return;
-                }
-
-                const resData = await response.json();
-                responseBox.innerHTML = formatMarkdownAnswer(resData.answer);
-            } catch (err) {
-                responseBox.innerHTML = `<div style="color: var(--accent-rose); padding: 1rem;">Failed to communicate with LLM Gate: ${escapeHtml(err.message)}</div>`;
-            }
-        });
-    }
-}
-
-function formatMarkdownAnswer(md) {
-    if (!md) return "";
-    let html = escapeHtml(md);
-    
-    // Simple markdown formatting for bold, headers, quotes, and code
-    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-    html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/^   &gt; (.*$)/gim, '<blockquote>$1</blockquote>');
-    html = html.replace(/---/g, '<hr style="border: none; border-top: 1px solid var(--border-glass); margin: 0.75rem 0;">');
-    html = html.replace(/\n/g, '<br>');
-    return html;
-}
-
-function initFilterChips() {
-    const chips = document.querySelectorAll(".filter-chip");
-    chips.forEach(chip => {
-        chip.addEventListener("click", () => {
-            chips.forEach(c => c.classList.remove("active"));
-            chip.classList.add("active");
-            currentFilter = chip.getAttribute("data-filter");
-            if (currentAnalysisData) {
-                renderFindingsTable(currentAnalysisData.entities, currentFilter);
-            }
-        });
-    });
-}
-
-function updateFilterCounts(entities) {
-    if (!entities) return;
-    
-    const countAll = entities.length;
-    const countPersons = entities.filter(e => e.type === "PERSON_NAME").length;
-    const countContacts = entities.filter(e => e.type === "EMAIL" || e.type === "PHONE_NUMBER").length;
-    const countIds = entities.filter(e => e.type === "EMPLOYEE_ID" || e.type === "CONTRACT_OP_ID" || e.type.includes("PAN") || e.type.includes("SSN")).length;
-    const countHigh = entities.filter(e => e.severity === "CRITICAL" || e.severity === "HIGH").length;
-
-    document.getElementById("countAll").textContent = countAll;
-    document.getElementById("countPersons").textContent = countPersons;
-    document.getElementById("countContacts").textContent = countContacts;
-    document.getElementById("countIds").textContent = countIds;
-    document.getElementById("countHigh").textContent = countHigh;
 }
 
 function escapeHtml(str) {
@@ -444,735 +887,6 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-function formatStructuralBanners(escapedHtml) {
-    if (!escapedHtml) return "";
-    
-    // Document metadata header
-    let html = escapedHtml.replace(/--- \[DOCUMENT OPENXML METADATA\] ---/g, 
-        '<div class="stream-banner metadata"><span class="banner-icon">📋</span> DOCUMENT OPENXML METADATA</div>');
-    
-    // Metadata separator line
-    html = html.replace(/----------------------------------/g, 
-        '<div class="stream-banner divider"></div>');
-    
-    // Slide headers
-    html = html.replace(/--- \[SLIDE (\d+)\] ---/g, 
-        '<div class="stream-banner slide"><span class="banner-icon">🎞️</span> SLIDE $1</div>');
-    
-    // Page headers
-    html = html.replace(/--- \[PAGE (\d+)\] ---/g, 
-        '<div class="stream-banner metadata"><span class="banner-icon">📄</span> PAGE $1</div>');
-    
-    // Table markers
-    html = html.replace(/\[TABLE\s*(\d+)?\s*START\]/g, 
-        '<span class="stream-table-tag">⊞ TABLE $1 START</span>');
-    html = html.replace(/\[TABLE\s*(\d+)?\s*END\]/g, 
-        '<span class="stream-table-tag">⊞ TABLE $1 END</span>');
-    
-    return html;
-}
-
-function formatRawStreamWithChips(rawText, entities) {
-    if (!rawText) return "";
-    
-    const iconMap = {
-        "PERSON_NAME": "👤",
-        "EMAIL": "✉️",
-        "PHONE_NUMBER": "📞",
-        "EMPLOYEE_ID": "🆔",
-        "CONTRACT_OP_ID": "📑",
-        "FINANCIAL_NUM": "💳",
-        "GOV_ID": "🏛️",
-        "IP_ADDRESS": "🌐"
-    };
-
-    if (!entities || entities.length === 0) {
-        return formatStructuralBanners(escapeHtml(rawText));
-    }
-
-    const validWithOffsets = entities.filter(e => typeof e.start === 'number' && typeof e.end === 'number');
-
-    if (validWithOffsets.length > 0) {
-        const sorted = [...validWithOffsets].sort((a, b) => b.start - a.start);
-        let pieces = [];
-        let curEnd = rawText.length;
-
-        for (const ent of sorted) {
-            const afterText = rawText.slice(ent.end, curEnd);
-            pieces.unshift(formatStructuralBanners(escapeHtml(afterText)));
-
-            let chipClass = "name";
-            if (ent.type === "EMAIL") chipClass = "email";
-            else if (ent.type === "PHONE_NUMBER") chipClass = "phone";
-            else if (ent.type === "EMPLOYEE_ID") chipClass = "emp_id";
-            else if (ent.type.includes("ID") || ent.type.includes("PAN") || ent.type.includes("PESEL")) chipClass = "contract";
-
-            const icon = iconMap[ent.type] || "⚠️";
-            const safeToken = ent.token ? escapeHtml(ent.token) : "";
-            const tooltip = `${ent.type} (${Math.round((ent.confidence || 1) * 100)}% conf) ➔ ${ent.token || 'Redacted'}\nReason: ${ent.reason || 'Protected entity'}`;
-
-            const replacementSpan = `<span class="pii-chip ${chipClass}" data-token="${safeToken}" data-entity-id="${ent.id}" data-type="${escapeHtml(ent.type)}" title="${escapeHtml(tooltip)}"><span class="chip-icon">${icon}</span>${escapeHtml(ent.text)}</span>`;
-            pieces.unshift(replacementSpan);
-
-            curEnd = ent.start;
-        }
-
-        if (curEnd > 0) {
-            const beforeText = rawText.slice(0, curEnd);
-            pieces.unshift(formatStructuralBanners(escapeHtml(beforeText)));
-        }
-
-        return pieces.join("");
-    }
-
-    let html = escapeHtml(rawText);
-    for (const ent of entities) {
-        if (!ent.text || ent.text.length < 2) continue;
-        const escVal = escapeHtml(ent.text);
-        let chipClass = "name";
-        if (ent.type === "EMAIL") chipClass = "email";
-        else if (ent.type === "PHONE_NUMBER") chipClass = "phone";
-        else if (ent.type === "EMPLOYEE_ID") chipClass = "emp_id";
-        else if (ent.type.includes("ID") || ent.type.includes("PAN") || ent.type.includes("PESEL")) chipClass = "contract";
-
-        const icon = iconMap[ent.type] || "⚠️";
-        const safeToken = ent.token ? escapeHtml(ent.token) : "";
-        const tooltip = `${ent.type} (${Math.round((ent.confidence || 1) * 100)}% conf) ➔ ${ent.token || 'Redacted'}\nReason: ${ent.reason || 'Protected entity'}`;
-
-        const replacementSpan = `<span class="pii-chip ${chipClass}" data-token="${safeToken}" data-entity-id="${ent.id}" data-type="${escapeHtml(ent.type)}" title="${escapeHtml(tooltip)}"><span class="chip-icon">${icon}</span>${escVal}</span>`;
-        html = html.split(escVal).join(replacementSpan);
-    }
-    return formatStructuralBanners(html);
-}
-
-function formatSanitizedStream(sanitizedText, entities) {
-    if (!sanitizedText) return "";
-    let safe = escapeHtml(sanitizedText);
-    
-    // 1. Format structural banners
-    safe = formatStructuralBanners(safe);
-    
-    // 2. Wrap cryptographic tokens: [TAG_hash] or [REDACTED_TAG]
-    safe = safe.replace(/\[([A-Z0-9_]+_[a-f0-9]{4,12})\]/g, (match, p1) => {
-        return `<span class="sanitized-token-chip" data-token="[${p1}]" title="Cryptographic Pseudonym (Salted HMAC-SHA256) • Reversible only via secure Cadence Vault"><span class="token-lock-icon">🔒</span>[${p1}]</span>`;
-    });
-    
-    safe = safe.replace(/\[(REDACTED_[A-Z0-9_]+)\]/g, (match, p1) => {
-        return `<span class="sanitized-token-chip" data-token="[${p1}]" title="Policy Redacted"><span class="token-lock-icon">🛡️</span>[${p1}]</span>`;
-    });
-
-    // 3. Wrap mask bars if in masking mode: ████
-    safe = safe.replace(/█{4,}/g, (match) => {
-        return `<span class="sanitized-mask-chip">${match}</span>`;
-    });
-    
-    return safe;
-}
-
-function renderFindingsTable(entities, filter = "ALL") {
-    const tbody = document.getElementById("findingsTableBody");
-    tbody.innerHTML = "";
-
-    if (!entities || entities.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 2rem;">No PII entities detected in this document.</td></tr>`;
-        return;
-    }
-
-    let filtered = entities;
-    if (filter === "PERSON_NAME") {
-        filtered = entities.filter(e => e.type === "PERSON_NAME");
-    } else if (filter === "CONTACT") {
-        filtered = entities.filter(e => e.type === "EMAIL" || e.type === "PHONE_NUMBER");
-    } else if (filter === "ID") {
-        filtered = entities.filter(e => e.type === "EMPLOYEE_ID" || e.type === "CONTRACT_OP_ID" || e.type.includes("PAN") || e.type.includes("SSN"));
-    } else if (filter === "CRITICAL") {
-        filtered = entities.filter(e => e.severity === "CRITICAL" || e.severity === "HIGH");
-    }
-
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 2rem;">No findings matching current filter "${filter}".</td></tr>`;
-        return;
-    }
-
-    filtered.forEach(ent => {
-        const tr = document.createElement("tr");
-
-        let sevClass = "sev-medium";
-        if (ent.severity === "CRITICAL") sevClass = "sev-critical";
-        else if (ent.severity === "HIGH") sevClass = "sev-high";
-
-        tr.innerHTML = `
-            <td><code>#${ent.id}</code></td>
-            <td><strong>${escapeHtml(ent.type)}</strong></td>
-            <td><code>${escapeHtml(ent.text)}</code></td>
-            <td><span class="severity-pill ${sevClass}">${ent.severity}</span></td>
-            <td><code>${Math.round(ent.confidence * 100)}%</code></td>
-            <td style="font-size: 0.78rem; color: var(--text-dim);">${escapeHtml(ent.reason)}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-function escapeHtml(str) {
-    if (!str) return "";
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-// ==============================================================================
-// 5. SETTINGS & TOGGLES
-// ==============================================================================
-
-function initSettingsToggles() {
-    // Redaction Mode Toggles
-    const modeBtns = [document.getElementById("btnModeToken"), document.getElementById("btnModeMask")];
-    modeBtns.forEach(btn => {
-        if (!btn) return;
-        btn.addEventListener("click", () => {
-            modeBtns.forEach(b => b && b.classList.remove("active"));
-            btn.classList.add("active");
-            currentRedactionMode = btn.getAttribute("data-mode");
-            
-            if (currentAnalysisData && currentAnalysisData.sample_info) {
-                loadSample(currentAnalysisData.sample_info.id);
-            }
-        });
-    });
-
-    // Paranoid Mode Toggles
-    const btnParanoidOn = document.getElementById("btnParanoidOn");
-    const btnParanoidOff = document.getElementById("btnParanoidOff");
-    const paranoidStatus = document.getElementById("paranoidStatus");
-
-    if (btnParanoidOn && btnParanoidOff) {
-        btnParanoidOn.addEventListener("click", () => {
-            btnParanoidOn.classList.add("active");
-            btnParanoidOff.classList.remove("active");
-            if (paranoidStatus) {
-                paranoidStatus.textContent = "ACTIVE";
-                paranoidStatus.style.color = "var(--accent-emerald)";
-            }
-        });
-
-        btnParanoidOff.addEventListener("click", () => {
-            btnParanoidOff.classList.add("active");
-            btnParanoidOn.classList.remove("active");
-            if (paranoidStatus) {
-                paranoidStatus.textContent = "OFF";
-                paranoidStatus.style.color = "var(--text-dim)";
-            }
-        });
-    }
-
-    // Confidence Threshold Slider
-    const thresholdSlider = document.getElementById("thresholdSlider");
-    const thresholdVal = document.getElementById("thresholdVal");
-    if (thresholdSlider && thresholdVal) {
-        thresholdSlider.addEventListener("input", (e) => {
-            thresholdVal.textContent = `${e.target.value}%`;
-        });
-    }
-
-    // Allow-List Rules Modal
-    const btnOpenAllowlist = document.getElementById("btnOpenAllowlist");
-    const allowlistModal = document.getElementById("allowlistModal");
-    const allowlistModalClose = document.getElementById("allowlistModalClose");
-
-    if (btnOpenAllowlist && allowlistModal) {
-        btnOpenAllowlist.addEventListener("click", () => {
-            allowlistModal.classList.add("active");
-        });
-
-        if (allowlistModalClose) {
-            allowlistModalClose.addEventListener("click", () => {
-                allowlistModal.classList.remove("active");
-            });
-        }
-
-        allowlistModal.addEventListener("click", (e) => {
-            if (e.target === allowlistModal) {
-                allowlistModal.classList.remove("active");
-            }
-        });
-    }
-}
-
-// ==============================================================================
-// 6. EXPORT & DOWNLOAD ACTIONS
-// ==============================================================================
-
-function initExportActions() {
-    const btnDownloadSanitized = document.getElementById("btnDownloadSanitized");
-    const btnDownloadLlmTxt = document.getElementById("btnDownloadLlmTxt");
-    const btnExportAuditJson = document.getElementById("btnExportAuditJson");
-    const btnExportAuditCsv = document.getElementById("btnExportAuditCsv");
-
-    if (btnDownloadSanitized) {
-        btnDownloadSanitized.addEventListener("click", async () => {
-            if (!currentAnalysisData) return alert("Please load or upload a document first.");
-            
-            const originalFilename = currentAnalysisData.filename;
-            const ext = (originalFilename.split('.').pop() || 'txt').toLowerCase();
-
-            try {
-                btnDownloadSanitized.disabled = true;
-                btnDownloadSanitized.style.opacity = "0.7";
-                
-                const response = await fetch("/api/download-redacted", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        filename: originalFilename,
-                        sanitized_text: currentAnalysisData.sanitized_text,
-                        export_format: "native"
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error("Server responded with error: " + response.status);
-                }
-
-                // Extract exact filename from Content-Disposition header if exposed
-                let downloadName = "";
-                const disposition = response.headers.get("Content-Disposition");
-                if (disposition && disposition.indexOf("filename=") !== -1) {
-                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-                    if (matches != null && matches[1]) {
-                        downloadName = matches[1].replace(/['"]/g, '');
-                    }
-                }
-                
-                if (!downloadName) {
-                    const baseName = originalFilename.replace(/\.[^/.]+$/, "");
-                    const cleanBase = baseName.startsWith("SANITIZED_") ? baseName.slice("SANITIZED_".length) : baseName;
-                    downloadName = `SANITIZED_${cleanBase}.${ext}`;
-                }
-
-                const blob = await response.blob();
-                downloadBlob(blob, downloadName);
-            } catch (err) {
-                console.error("Export error:", err);
-                alert("Failed to export sanitized document: " + err.message);
-            } finally {
-                btnDownloadSanitized.disabled = false;
-                btnDownloadSanitized.style.opacity = "1";
-            }
-        });
-    }
-
-    if (btnDownloadLlmTxt) {
-        btnDownloadLlmTxt.addEventListener("click", async () => {
-            if (!currentAnalysisData) return alert("Please load or upload a document first.");
-            
-            const originalFilename = currentAnalysisData.filename;
-            const baseName = originalFilename.replace(/\.[^/.]+$/, "");
-            const cleanBase = baseName.startsWith("SANITIZED_") ? baseName.slice("SANITIZED_".length) : baseName;
-
-            try {
-                btnDownloadLlmTxt.disabled = true;
-                btnDownloadLlmTxt.style.opacity = "0.7";
-
-                const response = await fetch("/api/download-redacted", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        filename: originalFilename,
-                        sanitized_text: currentAnalysisData.sanitized_text,
-                        export_format: "txt"
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error("Server responded with error: " + response.status);
-                }
-
-                const blob = await response.blob();
-                downloadBlob(blob, `SANITIZED_LLM_READY_${cleanBase}.txt`);
-            } catch (err) {
-                console.error("Plain text export error:", err);
-                alert("Failed to export plain text: " + err.message);
-            } finally {
-                btnDownloadLlmTxt.disabled = false;
-                btnDownloadLlmTxt.style.opacity = "1";
-            }
-        });
-    }
-
-    if (btnExportAuditJson) {
-        btnExportAuditJson.addEventListener("click", async () => {
-            if (!currentAnalysisData) return alert("Please load or upload a document first.");
-            
-            const response = await fetch("/api/export-audit", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    filename: currentAnalysisData.filename,
-                    audit_report: currentAnalysisData.audit_report,
-                    export_format: "json"
-                })
-            });
-
-            const blob = await response.blob();
-            downloadBlob(blob, `COMPLIANCE_AUDIT_${currentAnalysisData.filename}.json`);
-        });
-    }
-
-    if (btnExportAuditCsv) {
-        btnExportAuditCsv.addEventListener("click", async () => {
-            if (!currentAnalysisData) return alert("Please load or upload a document first.");
-            
-            const response = await fetch("/api/export-audit", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    filename: currentAnalysisData.filename,
-                    audit_report: currentAnalysisData.audit_report,
-                    export_format: "csv"
-                })
-            });
-
-            const blob = await response.blob();
-            downloadBlob(blob, `COMPLIANCE_AUDIT_${currentAnalysisData.filename}.csv`);
-        });
-    }
-}
-
-function downloadBlob(blob, filename) {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-}
-
-// ==============================================================================
-// 7. LOADING OVERLAY
-// ==============================================================================
-
-function showLoading(show, title = "Processing Document...", subtitle = "Extracting text and detecting PII...") {
-    const overlay = document.getElementById("loadingOverlay");
-    if (!overlay) return;
-
-    if (show) {
-        document.getElementById("loadingTitle").textContent = title;
-        document.getElementById("loadingSubtitle").textContent = subtitle;
-        overlay.classList.add("active");
-    } else {
-        overlay.classList.remove("active");
-    }
-}
-
-// ==============================================================================
-// 8. DUAL-PANE ARTIFACT INSPECTOR & PRIVACY DIFF SUITE
-// ==============================================================================
-
-function updateViewerDiffRibbon(data) {
-    const rawCountEl = document.getElementById("diffRawEntityCount");
-    const modeEl = document.getElementById("diffTransformMode");
-    const statusEl = document.getElementById("diffSanitizedStatus");
-    const rawFormatBadge = document.getElementById("rawFormatBadge");
-    const rawPiiCountSpan = document.getElementById("rawPiiCountSpan");
-    const sanitizedTokenCountSpan = document.getElementById("sanitizedTokenCountSpan");
-    const sanitizedPiiBadge = document.getElementById("sanitizedPiiBadge");
-
-    const piiCount = data.entity_count !== undefined ? data.entity_count : (data.entities ? data.entities.length : 0);
-    
-    if (rawCountEl) {
-        rawCountEl.textContent = `${piiCount} Active PII Risks Identified`;
-    }
-    if (modeEl) {
-        modeEl.textContent = currentRedactionMode === "tokenization" 
-            ? "Salted HMAC-SHA256 Cryptographic Tokens" 
-            : "High-Density Privacy Masking";
-    }
-    if (statusEl) {
-        if (data.verification_status === "PASSED") {
-            statusEl.textContent = "0 Residual PII • 100% Protected (Passed Fail-Closed)";
-            statusEl.className = "diff-ribbon-val text-emerald";
-        } else {
-            statusEl.textContent = "⚠️ Residual Identified (Blocked from LLM Dispatch)";
-            statusEl.className = "diff-ribbon-val text-rose";
-        }
-    }
-    if (rawFormatBadge) {
-        rawFormatBadge.textContent = (data.file_format || '.DOCX').replace('.', '').toUpperCase();
-    }
-    if (rawPiiCountSpan) {
-        rawPiiCountSpan.textContent = piiCount;
-    }
-    if (sanitizedTokenCountSpan) {
-        sanitizedTokenCountSpan.textContent = piiCount;
-    }
-    if (sanitizedPiiBadge) {
-        sanitizedPiiBadge.innerHTML = data.verification_status === "PASSED" ? "✅ 0 Residuals" : "⛔ Policy Alert";
-    }
-}
-
-function updateGutters() {
-    const rawPane = document.getElementById("paneRawText");
-    const sanPane = document.getElementById("paneSanitizedText");
-    const gutterRaw = document.getElementById("gutterRaw");
-    const gutterSan = document.getElementById("gutterSanitized");
-
-    if (!rawPane || !gutterRaw) return;
-
-    // Estimate line counts
-    const rawLines = (rawPane.innerText || "").split("\n").length || 1;
-    const sanLines = (sanPane.innerText || "").split("\n").length || 1;
-    const maxLines = Math.max(rawLines, sanLines, 30);
-
-    let gutterHtml = "";
-    for (let i = 1; i <= maxLines; i++) {
-        gutterHtml += `<div class="gutter-num">${i}</div>`;
-    }
-    gutterRaw.innerHTML = gutterHtml;
-    if (gutterSan) {
-        gutterSan.innerHTML = gutterHtml;
-    }
-}
-
-let syncScrollActive = true;
-let isScrolling = false;
-
-function initSyncScroll() {
-    const rawPane = document.getElementById("paneRawText");
-    const sanPane = document.getElementById("paneSanitizedText");
-    const gutterRaw = document.getElementById("gutterRaw");
-    const gutterSan = document.getElementById("gutterSanitized");
-    const btnSync = document.getElementById("btnToggleSyncScroll");
-
-    if (btnSync) {
-        btnSync.addEventListener("click", () => {
-            syncScrollActive = !syncScrollActive;
-            if (syncScrollActive) {
-                btnSync.classList.add("active");
-                btnSync.innerHTML = `<span class="sync-dot"></span> Sync Scroll: ON`;
-            } else {
-                btnSync.classList.remove("active");
-                btnSync.innerHTML = `<span class="sync-dot"></span> Sync Scroll: OFF`;
-            }
-        });
-    }
-
-    if (!rawPane || !sanPane) return;
-
-    rawPane.addEventListener("scroll", () => {
-        if (gutterRaw) gutterRaw.scrollTop = rawPane.scrollTop;
-        if (!syncScrollActive || isScrolling) return;
-        isScrolling = true;
-        const maxScroll = Math.max(1, rawPane.scrollHeight - rawPane.clientHeight);
-        const pct = rawPane.scrollTop / maxScroll;
-        sanPane.scrollTop = pct * Math.max(1, sanPane.scrollHeight - sanPane.clientHeight);
-        if (gutterSan) gutterSan.scrollTop = sanPane.scrollTop;
-        requestAnimationFrame(() => { isScrolling = false; });
-    });
-
-    sanPane.addEventListener("scroll", () => {
-        if (gutterSan) gutterSan.scrollTop = sanPane.scrollTop;
-        if (!syncScrollActive || isScrolling) return;
-        isScrolling = true;
-        const maxScroll = Math.max(1, sanPane.scrollHeight - sanPane.clientHeight);
-        const pct = sanPane.scrollTop / maxScroll;
-        rawPane.scrollTop = pct * Math.max(1, rawPane.scrollHeight - rawPane.clientHeight);
-        if (gutterRaw) gutterRaw.scrollTop = rawPane.scrollTop;
-        requestAnimationFrame(() => { isScrolling = false; });
-    });
-}
-
-function initViewerControls() {
-    const container = document.getElementById("dualPaneContainer");
-    const btnSplit = document.getElementById("btnViewSplit");
-    const btnSanitized = document.getElementById("btnViewSanitized");
-    const btnRaw = document.getElementById("btnViewRaw");
-    const modeBtns = [btnSplit, btnSanitized, btnRaw];
-
-    if (btnSplit && container) {
-        btnSplit.addEventListener("click", () => {
-            modeBtns.forEach(b => b && b.classList.remove("active"));
-            btnSplit.classList.add("active");
-            container.className = "dual-pane-container mode-split";
-        });
-    }
-
-    if (btnSanitized && container) {
-        btnSanitized.addEventListener("click", () => {
-            modeBtns.forEach(b => b && b.classList.remove("active"));
-            btnSanitized.classList.add("active");
-            container.className = "dual-pane-container mode-sanitized";
-        });
-    }
-
-    if (btnRaw && container) {
-        btnRaw.addEventListener("click", () => {
-            modeBtns.forEach(b => b && b.classList.remove("active"));
-            btnRaw.classList.add("active");
-            container.className = "dual-pane-container mode-raw";
-        });
-    }
-
-    // One-Click Stream Copy
-    const btnCopy = document.getElementById("btnCopyStream");
-    if (btnCopy) {
-        btnCopy.addEventListener("click", async () => {
-            if (!currentAnalysisData || !currentAnalysisData.sanitized_text) {
-                return alert("No sanitized text available to copy.");
-            }
-            try {
-                await navigator.clipboard.writeText(currentAnalysisData.sanitized_text);
-                const originalHtml = btnCopy.innerHTML;
-                btnCopy.classList.add("copied");
-                btnCopy.innerHTML = `✓ Copied!`;
-                setTimeout(() => {
-                    btnCopy.classList.remove("copied");
-                    btnCopy.innerHTML = originalHtml;
-                }, 2000);
-            } catch (err) {
-                const textarea = document.createElement("textarea");
-                textarea.value = currentAnalysisData.sanitized_text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand("copy");
-                document.body.removeChild(textarea);
-                btnCopy.classList.add("copied");
-                btnCopy.innerHTML = `✓ Copied!`;
-                setTimeout(() => {
-                    btnCopy.classList.remove("copied");
-                    btnCopy.innerHTML = `Copy Stream`;
-                }, 2000);
-            }
-        });
-    }
-
-    // In-Stream Search
-    initStreamSearch();
-}
-
-function initStreamSearch() {
-    const searchInput = document.getElementById("viewerSearchInput");
-    if (!searchInput) return;
-
-    searchInput.addEventListener("input", (e) => {
-        const query = e.target.value.trim();
-        const rawPane = document.getElementById("paneRawText");
-        const sanPane = document.getElementById("paneSanitizedText");
-
-        [rawPane, sanPane].forEach(pane => {
-            if (!pane) return;
-            const marks = pane.querySelectorAll(".search-highlight");
-            marks.forEach(m => {
-                const parent = m.parentNode;
-                parent.replaceChild(document.createTextNode(m.textContent), m);
-                parent.normalize();
-            });
-        });
-
-        if (!query || query.length < 2) return;
-
-        let firstMatch = null;
-        [rawPane, sanPane].forEach(pane => {
-            if (!pane) return;
-            const walker = document.createTreeWalker(pane, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let node;
-            while ((node = walker.nextNode())) {
-                if (node.nodeValue.toLowerCase().includes(query.toLowerCase())) {
-                    textNodes.push(node);
-                }
-            }
-
-            textNodes.forEach(textNode => {
-                const text = textNode.nodeValue;
-                const regex = new RegExp(`(${escapeRegex(query)})`, "gi");
-                const frag = document.createDocumentFragment();
-                let lastIdx = 0;
-                let match;
-                while ((match = regex.exec(text)) !== null) {
-                    if (match.index > lastIdx) {
-                        frag.appendChild(document.createTextNode(text.substring(lastIdx, match.index)));
-                    }
-                    const mark = document.createElement("mark");
-                    mark.className = "search-highlight";
-                    mark.textContent = match[0];
-                    if (!firstMatch) firstMatch = mark;
-                    frag.appendChild(mark);
-                    lastIdx = regex.lastIndex;
-                }
-                if (lastIdx < text.length) {
-                    frag.appendChild(document.createTextNode(text.substring(lastIdx)));
-                }
-                if (textNode.parentNode) {
-                    textNode.parentNode.replaceChild(frag, textNode);
-                }
-            });
-        });
-
-        if (firstMatch) {
-            firstMatch.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-    });
-}
-
-function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function initEntityHoverLinking() {
-    bindEntityHoverListeners();
-}
-
-function bindEntityHoverListeners() {
-    const rawPane = document.getElementById("paneRawText");
-    const sanPane = document.getElementById("paneSanitizedText");
-    if (!rawPane || !sanPane) return;
-
-    rawPane.onmouseover = (e) => {
-        const chip = e.target.closest(".pii-chip");
-        if (chip) {
-            const token = chip.getAttribute("data-token");
-            if (token) {
-                const targetTokens = sanPane.querySelectorAll(`[data-token="${CSS.escape(token)}"]`);
-                targetTokens.forEach(t => t.classList.add("hover-linked"));
-            }
-        }
-    };
-
-    rawPane.onmouseout = (e) => {
-        const chip = e.target.closest(".pii-chip");
-        if (chip) {
-            const token = chip.getAttribute("data-token");
-            if (token) {
-                const targetTokens = sanPane.querySelectorAll(`[data-token="${CSS.escape(token)}"]`);
-                targetTokens.forEach(t => t.classList.remove("hover-linked"));
-            }
-        }
-    };
-
-    sanPane.onmouseover = (e) => {
-        const chip = e.target.closest(".sanitized-token-chip");
-        if (chip) {
-            const token = chip.getAttribute("data-token");
-            if (token) {
-                const targetEntities = rawPane.querySelectorAll(`[data-token="${CSS.escape(token)}"]`);
-                targetEntities.forEach(ent => ent.classList.add("hover-linked"));
-            }
-        }
-    };
-
-    sanPane.onmouseout = (e) => {
-        const chip = e.target.closest(".sanitized-token-chip");
-        if (chip) {
-            const token = chip.getAttribute("data-token");
-            if (token) {
-                const targetEntities = rawPane.querySelectorAll(`[data-token="${CSS.escape(token)}"]`);
-                targetEntities.forEach(ent => ent.classList.remove("hover-linked"));
-            }
-        }
-    };
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
