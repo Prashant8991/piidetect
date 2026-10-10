@@ -1,0 +1,27 @@
+{
+  "filename": "client_onboarding.pptx",
+  "format": "PPTX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Chukwudi de Silva",
+      "has_context": false
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "555.646.5010 ext. 30",
+      "has_context": true
+    },
+    {
+      "entity": "EMAIL",
+      "text": "chukwudi.desilva@partner.example.com",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Tier 1 Client Onboarding",
+    "Enterprise SLA: 99.99%",
+    "Risk & Assurance Working Group"
+  ]
+}

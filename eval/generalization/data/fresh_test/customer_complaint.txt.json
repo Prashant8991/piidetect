@@ -1,0 +1,28 @@
+{
+  "filename": "customer_complaint.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Lars-Erik Bertucci",
+      "has_context": false
+    },
+    {
+      "entity": "EMAIL",
+      "text": "lars-erik dot bertucci at gmail dot com",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+91 9866919549",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Ticket #CAS-88120",
+    "Order #ORD-991204",
+    "Product SKU: PROD-4410",
+    "48 hours"
+  ]
+}

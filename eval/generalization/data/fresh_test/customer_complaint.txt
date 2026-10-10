@@ -1,0 +1,7 @@
+Customer Feedback Log
+Case Reference: Ticket #CAS-88120
+Related Order: Order #ORD-991204 regarding Product SKU: PROD-4410
+
+Complaint submitted by Lars-Erik Bertucci.
+Customer requested response to lars-erik dot bertucci at gmail dot com or mobile +91 9866919549.
+Issue: Item was delayed beyond the guaranteed 48 hours delivery window.

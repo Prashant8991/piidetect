@@ -1,0 +1,27 @@
+{
+  "filename": "meeting_minutes.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Dmitri Kowalska",
+      "has_context": false
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Ananya Dubois",
+      "has_context": false
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Zahra van der Meer",
+      "has_context": false
+    }
+  ],
+  "must_not_redact": [
+    "Board Risk Committee",
+    "Q3 2024 Strategic Review",
+    "Action Item 3.1"
+  ]
+}

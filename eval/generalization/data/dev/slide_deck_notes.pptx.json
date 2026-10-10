@@ -1,0 +1,21 @@
+{
+  "filename": "slide_deck_notes.pptx",
+  "format": "PPTX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Soraya Dubois",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+49 30 9398441",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Confidential Strategy Briefing",
+    "FY2025 Targets"
+  ]
+}

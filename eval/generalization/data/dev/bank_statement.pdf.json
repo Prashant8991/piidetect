@@ -1,0 +1,28 @@
+{
+  "filename": "bank_statement.pdf",
+  "format": "PDF",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Ananya Nielsen",
+      "has_context": false
+    },
+    {
+      "entity": "CUSTOM_ID",
+      "text": "Account #910620",
+      "has_context": true
+    },
+    {
+      "entity": "ADDRESS",
+      "text": "306 Oakway Lane, Singapore",
+      "has_context": false
+    }
+  ],
+  "must_not_redact": [
+    "Pacific Standard Bank",
+    "01/09/2024 - 30/09/2024",
+    "$12,450.80",
+    "Sort Code 40-12-88"
+  ]
+}

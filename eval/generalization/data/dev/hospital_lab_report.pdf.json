@@ -1,0 +1,33 @@
+{
+  "filename": "hospital_lab_report.pdf",
+  "format": "PDF",
+  "source": "ocr",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Mateo Featherstone",
+      "has_context": true
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Ms. Fatima van der Meer",
+      "has_context": true
+    },
+    {
+      "entity": "CUSTOM_ID",
+      "text": "PATIENT-967",
+      "has_context": true
+    },
+    {
+      "entity": "DOB",
+      "text": "1984-02-12",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Metropolitan Health Authority",
+    "Hematology Panel",
+    "Reference Range 4.5-11.0",
+    "120/80 mmHg"
+  ]
+}

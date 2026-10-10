@@ -1,0 +1,28 @@
+{
+  "filename": "tax_declaration.csv",
+  "format": "CSV",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Elena Nielsen",
+      "has_context": true
+    },
+    {
+      "entity": "SSN",
+      "text": "132-50-7572",
+      "has_context": true
+    },
+    {
+      "entity": "ADDRESS",
+      "text": "479 Highland Crescent",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Form 1040-EZ",
+    "Tax Year 2023",
+    "84000.00",
+    "0.22"
+  ]
+}

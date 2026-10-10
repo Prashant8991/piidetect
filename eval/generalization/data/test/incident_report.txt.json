@@ -1,0 +1,23 @@
+{
+  "filename": "incident_report.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "USER_ID",
+      "text": "user=j_doe99",
+      "has_context": true
+    },
+    {
+      "entity": "IP_ADDRESS",
+      "text": "192.168.186.166",
+      "has_context": false
+    }
+  ],
+  "must_not_redact": [
+    "SEC-INC-2024-001",
+    "Port 443",
+    "nginx/1.24.0",
+    "SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  ]
+}

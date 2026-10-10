@@ -1,0 +1,33 @@
+{
+  "filename": "executive_resume.docx",
+  "format": "DOCX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Ananya Kowalska",
+      "has_context": false
+    },
+    {
+      "entity": "EMAIL",
+      "text": "ananya.kowalska@consulting.example.com",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "555.100.8964 ext. 84",
+      "has_context": true
+    },
+    {
+      "entity": "CUSTOM_ID",
+      "text": "ID: 492019",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "2016-2020",
+    "2021-Present",
+    "VP, Engineering",
+    "Pacific Standard Bank"
+  ]
+}

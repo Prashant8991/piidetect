@@ -1,0 +1,27 @@
+{
+  "filename": "client_onboarding.pptx",
+  "format": "PPTX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Soraya de Silva",
+      "has_context": false
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "555.289.1826 ext. 73",
+      "has_context": true
+    },
+    {
+      "entity": "EMAIL",
+      "text": "soraya.desilva@partner.example.com",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Tier 1 Client Onboarding",
+    "Enterprise SLA: 99.99%",
+    "Risk & Assurance Working Group"
+  ]
+}

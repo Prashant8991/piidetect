@@ -1,0 +1,35 @@
+{
+  "filename": "academic_cv.pdf",
+  "format": "PDF",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Dr. Dmitri Raghunathan",
+      "has_context": false
+    },
+    {
+      "entity": "EMAIL",
+      "text": "dmitri.raghunathan@stanford.example.edu",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "555.674.4257 ext. 93",
+      "has_context": true
+    },
+    {
+      "entity": "ORCID",
+      "text": "0000-0002-2424-7912",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "2018 - 2021",
+    "2022-2027",
+    "(2023)",
+    "10.1038/s41586-020-2649-2",
+    "Stanford University",
+    "Department of Computer Science"
+  ]
+}

@@ -90,6 +90,7 @@ async def get_samples():
 class ProcessSampleRequest(BaseModel):
     sample_id: str
     redaction_mode: str = "tokenization"
+    detection_mode: str = "strict"
     max_pdf_pages: Optional[int] = 5
 
 
@@ -113,6 +114,7 @@ async def process_sample(req: ProcessSampleRequest):
             filename=sample_info["filename"],
             file_bytes=file_bytes,
             redaction_mode=req.redaction_mode,
+            detection_mode=req.detection_mode,
             max_pdf_pages=req.max_pdf_pages
         )
         # Cache bytes, entities, and structural blocks for layout-preserved native export
@@ -131,16 +133,17 @@ async def process_sample(req: ProcessSampleRequest):
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
-ALLOWED_EXTENSIONS = {".pptx", ".docx", ".pdf", ".txt"}
+ALLOWED_EXTENSIONS = {".pptx", ".docx", ".pdf", ".txt", ".csv"}
 
 
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),
     redaction_mode: str = Form("tokenization"),
+    detection_mode: str = Form("strict"),
     max_pdf_pages: int = Form(5)
 ):
-    """Uploads, validates, and processes any .pptx, .docx, .pdf, or .txt file."""
+    """Uploads, validates, and processes any .pptx, .docx, .pdf, .txt, or .csv file."""
     filename = file.filename or ""
     _, ext = os.path.splitext(filename.lower())
     if ext not in ALLOWED_EXTENSIONS:
@@ -167,6 +170,7 @@ async def upload_file(
             filename=filename,
             file_bytes=file_bytes,
             redaction_mode=redaction_mode,
+            detection_mode=detection_mode,
             max_pdf_pages=max_pdf_pages
         )
         # Cache bytes, entities, and structural blocks for layout-preserved native export
@@ -276,6 +280,85 @@ async def export_audit(req: ExportAuditRequest):
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="{out_name}"'}
         )
+
+
+from pii_redactor.custom_rules import (
+    load_custom_config,
+    save_custom_config,
+    add_custom_rule,
+    remove_custom_rule,
+    test_rule_against_text,
+    is_safe_regex
+)
+
+
+class AddCustomRuleRequest(BaseModel):
+    entity_type: str
+    pattern: str
+    token_type: str = "CUSTOM"
+    description: str = ""
+
+
+class TestCustomRuleRequest(BaseModel):
+    pattern: str
+    sample_text: str
+
+
+class ReviewDecisionRequest(BaseModel):
+    action: str  # "approve" or "reject"
+    entity_type: str
+    text: str
+
+
+@app.get("/api/custom-rules")
+async def get_custom_rules():
+    """Returns persistent custom rules and allow-list."""
+    return load_custom_config()
+
+
+@app.post("/api/custom-rules")
+async def create_custom_rule(req: AddCustomRuleRequest):
+    """Adds a validated, safe custom regex detection rule."""
+    ok, msg, rule = add_custom_rule(req.entity_type, req.pattern, req.token_type, req.description)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "success", "message": msg, "rule": rule}
+
+
+@app.delete("/api/custom-rules/{rule_id}")
+async def delete_custom_rule(rule_id: str):
+    """Deletes a custom regex detection rule."""
+    ok = remove_custom_rule(rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"status": "success", "message": "Rule removed"}
+
+
+@app.post("/api/custom-rules/test")
+async def test_custom_rule_endpoint(req: TestCustomRuleRequest):
+    """Tests a custom regex against sample text with security timeout."""
+    try:
+        matches = test_rule_against_text(req.pattern, req.sample_text)
+        return {"status": "success", "matches": matches, "count": len(matches)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/review-decision")
+async def review_decision_endpoint(req: ReviewDecisionRequest):
+    """Learns human decisions from review UI (approve -> custom rule; reject -> allowlist)."""
+    cfg = load_custom_config()
+    clean_val = req.text.strip()
+    if req.action == "reject":
+        if clean_val and clean_val not in cfg["allowlist"]:
+            cfg["allowlist"].append(clean_val)
+            save_custom_config(cfg)
+        return {"status": "success", "message": f"Added '{clean_val}' to persistent allow-list"}
+    elif req.action == "approve":
+        safe_pat = re.escape(clean_val)
+        ok, msg, _ = add_custom_rule(req.entity_type, rf"\b{safe_pat}\b", description=f"Learned PII: {clean_val}")
+        return {"status": "success", "message": f"Learned custom rule for '{clean_val}'"}
+    raise HTTPException(status_code=400, detail="Invalid action: must be 'approve' or 'reject'")
 
 
 @app.get("/api/download-manual-pdf")

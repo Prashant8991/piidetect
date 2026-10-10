@@ -1,0 +1,435 @@
+[
+  {
+    "filename": "academic_cv.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Chief Fatima Kowalska",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "fatima.kowalska@stanford.example.edu",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+44 20 7620 8757",
+        "has_context": true
+      },
+      {
+        "entity": "ORCID",
+        "text": "0000-0002-9988-4691",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "2018 - 2021",
+      "2022-2027",
+      "(2023)",
+      "10.1038/s41586-020-2649-2",
+      "Stanford University",
+      "Department of Computer Science"
+    ]
+  },
+  {
+    "filename": "executive_resume.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ananya Kowalska",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "ananya.kowalska@consulting.example.com",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "555.100.8964 ext. 84",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "ID: 492019",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "2016-2020",
+      "2021-Present",
+      "VP, Engineering",
+      "Pacific Standard Bank"
+    ]
+  },
+  {
+    "filename": "hospital_lab_report.pdf",
+    "format": "PDF",
+    "source": "ocr",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ingrid Bhattacharya",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mx. Jean-Luc Kowalska",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "PATIENT-369",
+        "has_context": true
+      },
+      {
+        "entity": "DOB",
+        "text": "1984-10-24",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Metropolitan Health Authority",
+      "Hematology Panel",
+      "Reference Range 4.5-11.0",
+      "120/80 mmHg"
+    ]
+  },
+  {
+    "filename": "vendor_invoice.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Aarav Schumacher",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "CUST#7271",
+        "has_context": true
+      },
+      {
+        "entity": "IBAN",
+        "text": "GB33MIDL40051516983035",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "INV-2024-8891",
+      "$4,850.00",
+      "20%",
+      "Global Logistics Partners LLC"
+    ]
+  },
+  {
+    "filename": "bank_statement.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Hassan Okonkwo",
+        "has_context": false
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "Account #919557",
+        "has_context": true
+      },
+      {
+        "entity": "ADDRESS",
+        "text": "892 Kingsway, Chicago",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "Pacific Standard Bank",
+      "01/09/2024 - 30/09/2024",
+      "$12,450.80",
+      "Sort Code 40-12-88"
+    ]
+  },
+  {
+    "filename": "hr_disciplinary_letter.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Zahra MacLeod",
+        "has_context": false
+      },
+      {
+        "entity": "EMPLOYEE_ID",
+        "text": "EMP-32794",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ms. Alejandro Bertucci",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Human Resources Department",
+      "Section 4.2 Standard Operating Procedure"
+    ]
+  },
+  {
+    "filename": "incident_report.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "USER_ID",
+        "text": "user=j_doe99",
+        "has_context": true
+      },
+      {
+        "entity": "IP_ADDRESS",
+        "text": "192.168.53.110",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "SEC-INC-2024-001",
+      "Port 443",
+      "nginx/1.24.0",
+      "SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ]
+  },
+  {
+    "filename": "client_onboarding.pptx",
+    "format": "PPTX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mateo Schumacher",
+        "has_context": false
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+1 (555) 395-5688",
+        "has_context": true
+      },
+      {
+        "entity": "EMAIL",
+        "text": "mateo.schumacher@partner.example.com",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Tier 1 Client Onboarding",
+      "Enterprise SLA: 99.99%",
+      "Risk & Assurance Working Group"
+    ]
+  },
+  {
+    "filename": "medical_prescription.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Elena MacLeod",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ms. Liam Takahashi",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "Policy No. POL-8902",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Amoxicillin 500mg",
+      "Rx# 99401",
+      "Take 1 capsule every 8 hours"
+    ]
+  },
+  {
+    "filename": "tax_declaration.csv",
+    "format": "CSV",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Fatima Bertucci",
+        "has_context": true
+      },
+      {
+        "entity": "SSN",
+        "text": "246-37-1557",
+        "has_context": true
+      },
+      {
+        "entity": "ADDRESS",
+        "text": "306 Oakway Lane",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Form 1040-EZ",
+      "Tax Year 2023",
+      "84000.00",
+      "0.22"
+    ]
+  },
+  {
+    "filename": "customer_complaint.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Lars-Erik Bertucci",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "lars-erik dot bertucci at gmail dot com",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+91 9866919549",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Ticket #CAS-88120",
+      "Order #ORD-991204",
+      "Product SKU: PROD-4410",
+      "48 hours"
+    ]
+  },
+  {
+    "filename": "nda_agreement.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Chukwudi Nielsen",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Hassan O'Connor",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Apex Capital Management",
+      "Horizon Data Systems Group",
+      "3 years",
+      "State of New York"
+    ]
+  },
+  {
+    "filename": "meeting_minutes.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Aarav O'Connor",
+        "has_context": false
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Katarzyna de Silva",
+        "has_context": false
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Fatima Bhattacharya",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "Board Risk Committee",
+      "Q3 2024 Strategic Review",
+      "Action Item 3.1"
+    ]
+  },
+  {
+    "filename": "chat_transcript.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ingrid MacLeod",
+        "has_context": false
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "555.883.9452 ext. 34",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "10:14 AM",
+      "10:15 AM",
+      "Sprint 42",
+      "jira.example.internal"
+    ]
+  },
+  {
+    "filename": "sales_receipt.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Aarav Raghunathan",
+        "has_context": true
+      },
+      {
+        "entity": "CREDIT_CARD",
+        "text": "Visa ending in 2503",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Subtotal: $45.00",
+      "Tax: $3.82",
+      "Total: $48.82",
+      "Store #108"
+    ]
+  },
+  {
+    "filename": "slide_deck_notes.pptx",
+    "format": "PPTX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mateo Nkemdirim",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+91 9842748173",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Confidential Strategy Briefing",
+      "FY2025 Targets"
+    ]
+  }
+]

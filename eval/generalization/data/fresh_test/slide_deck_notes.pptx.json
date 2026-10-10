@@ -1,0 +1,21 @@
+{
+  "filename": "slide_deck_notes.pptx",
+  "format": "PPTX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Mateo Nkemdirim",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+91 9842748173",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Confidential Strategy Briefing",
+    "FY2025 Targets"
+  ]
+}

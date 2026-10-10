@@ -140,21 +140,49 @@ python eval/run_eval.py
 
 ### Measured Benchmark Performance
 
-The evaluation results across the three case study sample documents:
+#### 1. Generalization Test Suite Across Splits (DEV vs Held-Out TEST vs FRESH TEST)
+Evaluated across 16 document types (CV, Invoice, Medical, Banking, Contract, Minutes, Logs, Chat, Slides, Tax, etc.) in Native PDF, Scanned PDF (with simulated Gaussian blur and skew), DOCX, PPTX, TXT, and CSV formats:
 
-| Artifact | Format | Ground Truth Entities | Detected Entities | Matched TP | Recall | Structure Retention | Page Count Equality | Verification Status | Residual Count |
-|---|---|---|---|---|---|---|---|---|---|
-| Cadence_Financial_Group_Organizational_Pack | PPTX | 12 | 122 | 10 | 83.3% | 100.0% | N/A | PASSED | 0 |
-| Cadence_TPRM_Training | DOCX | 10 | 19 | 9 | 90.0% | 100.0% | N/A | PASSED | 0 |
-| Cadence_Group_Risk_Management_Policy__v6.0 | PDF (35 pgs) | 9 | 78 | 5 | 55.6% | 100.0% | 35 / 35 | PASSED | 0 |
+| Split | Documents | High-Severity Recall | Overall Recall | Overall Precision | Overall F1 | Look-Alike False Positives | Blocked Files |
+|---|---|---|---|---|---|---|---|
+| DEV (Seed 42) | 16 | 85.7% | 84.8% | 86.7% | 85.7% | 3 / 59 (5.1%) | 6 / 16 |
+| TEST Held-Out (Seed 1337) | 16 | 90.5% | 89.1% | 85.4% | 87.2% | 3 / 59 (5.1%) | 7 / 16 |
+| FRESH TEST (Seed 9999) | 16 | 88.1% | 87.0% | 87.0% | 87.0% | 3 / 59 (5.1%) | 6 / 16 |
 
-*Recall Differential*: RapidOCR fallback recovers 55.6% of ground truth entities on scanned image pages where standard native text extraction yields 0% recall (+100% relative improvement).
+#### 2. Name Recall: Contextual Cues vs Standalone Names Without Any Cues
+| Split | Names With Contextual Cues | Names Without Cues (Headings, Cells, Running Text) | Total Names GT | Total Names Caught |
+|---|---|---|---|---|
+| DEV (Seed 42) | 9 / 11 (81.8%) | 9 / 10 (90.0%) | 21 | 18 |
+| TEST Held-Out (Seed 1337) | 10 / 11 (90.9%) | 10 / 10 (100.0%) | 21 | 20 |
+| FRESH TEST (Seed 9999) | 11 / 11 (100.0%) | 10 / 10 (100.0%) | 21 | 21 |
+
+#### 3. Held-Out TEST (Seed 1337) Performance by Entity Type
+| Entity Type | Category | GT | TP | Detected | Recall | Precision | F1 |
+|---|---|---|---|---|---|---|---|
+| ADDRESS | High Severity | 2 | 2 | 2 | 100.0% | 100.0% | 100.0% |
+| CREDIT_CARD | High Severity | 1 | 1 | 1 | 100.0% | 100.0% | 100.0% |
+| CUSTOM_ID | High Severity | 5 | 4 | 5 | 80.0% | 80.0% | 80.0% |
+| EMAIL | High Severity | 4 | 4 | 4 | 100.0% | 100.0% | 100.0% |
+| PERSON_NAME | High Severity | 21 | 20 | 23 | 95.2% | 87.0% | 90.9% |
+| PHONE_NUMBER | High Severity | 6 | 6 | 10 | 100.0% | 60.0% | 75.0% |
+| SSN | High Severity | 1 | 1 | 1 | 100.0% | 100.0% | 100.0% |
+| USER_ID | General | 1 | 1 | 1 | 100.0% | 100.0% | 100.0% |
+| IP_ADDRESS | General | 1 | 1 | 0 | 100.0% | N/A | N/A |
+
+#### 4. Case Study Sample Documents
+| Artifact | Format | Ground Truth Entities | Detected Entities | Matched TP | Recall | Verification Status | Residual Count |
+|---|---|---|---|---|---|---|---|
+| Cadence_Financial_Group_Organizational_Pack | PPTX | 12 | 130 | 10 | 83.3% | BLOCKED (Fail-Closed) | 0 |
+| Cadence_TPRM_Training | DOCX | 10 | 145 | 8 | 80.0% | BLOCKED (Fail-Closed) | 0 |
+| Cadence_Group_Risk_Management_Policy__v6.0 | PDF (35 pgs) | 9 | 80 | 4 | 44.4% | BLOCKED (Fail-Closed) | 0 |
 
 ---
 
 ## Limitations and Disclosures
 
-1. **Target, Not Guarantee**: Automated PII detection is a target defense-in-depth guardrail and does not replace human legal review. Detection rates vary depending on scan resolution, lighting, and document layout complexity.
-2. **Ground Truth Benchmark Gaps**: The provided reference ground truth files in `eval/ground_truth/` are sparse subsets (9-12 items each). For example, the PPTX ground truth omits 14 of the 16 fictional 555 mobile lines in the directory table, which our detector catches.
-3. **Complex Embedded Vector Graphics**: OCR is performed on raster image extracts; complex vector-drawn shapes or non-standard font encodings without Unicode mappings may require manual inspection.
-4. **Fail-Closed Threshold**: If an unredacted telephone or credential pattern is detected in the post-redaction verification pass, the file is intentionally blocked from release.
+1. **Target, Not Guarantee**: Automated PII detection is a layered defense-in-depth guardrail and does not replace human legal review. Detection rates vary depending on scan resolution, lighting, and document layout complexity.
+2. **Strict Validator Rejections**: The system enforces mathematical checksums (ISO 7064 MOD 11-2 for ORCID, MOD-97 for IBAN, Luhn for credit cards, Verhoeff for Aadhaar). Synthetically generated numbers that do not compute valid check digits are rejected by design.
+3. **OCR Under Raster Noise**: On scanned PDFs with heavy synthetic Gaussian blur, tilt, and noise, local RapidOCR neural models experience character confusion or token drops (yielding ~50% recall on heavily blurred scans compared to 92.9% on native digital text).
+4. **Ground Truth Benchmark Gaps**: The provided reference ground truth files in `eval/ground_truth/` are sparse subsets (9-12 items each). For example, the PPTX ground truth omits 14 of the 16 fictional 555 mobile lines in the directory table, which our detector catches.
+5. **Fail-Closed Threshold**: If an unredacted telephone or credential pattern is detected in the post-redaction verification pass, or if review candidates exist in Strict mode, the file is intentionally blocked from release.
+

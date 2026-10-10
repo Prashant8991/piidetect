@@ -1,0 +1,27 @@
+{
+  "filename": "medical_prescription.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Aarav MacLeod",
+      "has_context": true
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Chief Siobhan Schumacher",
+      "has_context": true
+    },
+    {
+      "entity": "CUSTOM_ID",
+      "text": "Policy No. POL-8902",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Amoxicillin 500mg",
+    "Rx# 99401",
+    "Take 1 capsule every 8 hours"
+  ]
+}

@@ -1,0 +1,8 @@
+PRESCRIPTION ORDER - Rx# 99401
+Prescribing Physician: Chief Siobhan Schumacher
+Patient: Aarav MacLeod
+Insurance: Policy No. POL-8902
+
+Medication: Amoxicillin 500mg
+Directions: Take 1 capsule every 8 hours with water.
+Refills: 0

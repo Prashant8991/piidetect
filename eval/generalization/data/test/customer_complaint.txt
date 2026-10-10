@@ -1,0 +1,7 @@
+Customer Feedback Log
+Case Reference: Ticket #CAS-88120
+Related Order: Order #ORD-991204 regarding Product SKU: PROD-4410
+
+Complaint submitted by Kwame Lindqvist.
+Customer requested response to kwame dot lindqvist at gmail dot com or mobile 555.540.5710 ext. 29.
+Issue: Item was delayed beyond the guaranteed 48 hours delivery window.

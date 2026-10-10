@@ -1,0 +1,23 @@
+{
+  "filename": "nda_agreement.docx",
+  "format": "DOCX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Chukwudi Gomez",
+      "has_context": true
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Liam de Silva",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Apex Capital Management",
+    "Horizon Data Systems Group",
+    "3 years",
+    "State of New York"
+  ]
+}

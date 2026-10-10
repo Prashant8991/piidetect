@@ -1,0 +1,3 @@
+[10:14 AM] Ingrid MacLeod: Morning team, updating Sprint 42 tasks on jira.example.internal.
+[10:15 AM] Alex: Sounds good. Can someone ring me on 555.883.9452 ext. 34 once the build finishes?
+[10:16 AM] Ingrid MacLeod: Sure, will do.

@@ -1,0 +1,8 @@
+CUSTOMER RECEIPT - Store #108
+Customer: Dmitri Featherstone
+Payment Method: Visa ending in 2827
+Auth Code: 994012
+
+Subtotal: $45.00
+Tax: $3.82
+Total: $48.82

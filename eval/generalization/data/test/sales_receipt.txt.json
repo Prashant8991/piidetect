@@ -1,0 +1,23 @@
+{
+  "filename": "sales_receipt.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Zahra Dubois",
+      "has_context": true
+    },
+    {
+      "entity": "CREDIT_CARD",
+      "text": "Visa ending in 3606",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Subtotal: $45.00",
+    "Tax: $3.82",
+    "Total: $48.82",
+    "Store #108"
+  ]
+}

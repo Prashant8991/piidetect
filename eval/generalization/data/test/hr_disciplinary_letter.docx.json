@@ -1,0 +1,26 @@
+{
+  "filename": "hr_disciplinary_letter.docx",
+  "format": "DOCX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Tariq Bhattacharya",
+      "has_context": false
+    },
+    {
+      "entity": "EMPLOYEE_ID",
+      "text": "EMP-82798",
+      "has_context": true
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Dr. Ingrid Schumacher",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Human Resources Department",
+    "Section 4.2 Standard Operating Procedure"
+  ]
+}

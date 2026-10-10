@@ -1,0 +1,28 @@
+{
+  "filename": "vendor_invoice.pdf",
+  "format": "PDF",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Aarav Schumacher",
+      "has_context": true
+    },
+    {
+      "entity": "CUSTOM_ID",
+      "text": "CUST#7271",
+      "has_context": true
+    },
+    {
+      "entity": "IBAN",
+      "text": "GB33MIDL40051516983035",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "INV-2024-8891",
+    "$4,850.00",
+    "20%",
+    "Global Logistics Partners LLC"
+  ]
+}

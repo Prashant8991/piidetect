@@ -1,0 +1,3 @@
+[10:14 AM] Mei-Ling Gomez: Morning team, updating Sprint 42 tasks on jira.example.internal.
+[10:15 AM] Alex: Sounds good. Can someone ring me on +49 30 1192619 once the build finishes?
+[10:16 AM] Mei-Ling Gomez: Sure, will do.

@@ -1,0 +1,435 @@
+[
+  {
+    "filename": "academic_cv.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Dr. Dmitri Raghunathan",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "dmitri.raghunathan@stanford.example.edu",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "555.674.4257 ext. 93",
+        "has_context": true
+      },
+      {
+        "entity": "ORCID",
+        "text": "0000-0002-2424-7912",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "2018 - 2021",
+      "2022-2027",
+      "(2023)",
+      "10.1038/s41586-020-2649-2",
+      "Stanford University",
+      "Department of Computer Science"
+    ]
+  },
+  {
+    "filename": "executive_resume.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ingrid Takahashi",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "ingrid.takahashi@consulting.example.com",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+44 20 7828 1106",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "ID: 492019",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "2016-2020",
+      "2021-Present",
+      "VP, Engineering",
+      "Pacific Standard Bank"
+    ]
+  },
+  {
+    "filename": "hospital_lab_report.pdf",
+    "format": "PDF",
+    "source": "ocr",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mateo Featherstone",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ms. Fatima van der Meer",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "PATIENT-967",
+        "has_context": true
+      },
+      {
+        "entity": "DOB",
+        "text": "1984-02-12",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Metropolitan Health Authority",
+      "Hematology Panel",
+      "Reference Range 4.5-11.0",
+      "120/80 mmHg"
+    ]
+  },
+  {
+    "filename": "vendor_invoice.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Chukwudi O'Connor",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "CUST#1711",
+        "has_context": true
+      },
+      {
+        "entity": "IBAN",
+        "text": "GB18MIDL40051516150444",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "INV-2024-8891",
+      "$4,850.00",
+      "20%",
+      "Global Logistics Partners LLC"
+    ]
+  },
+  {
+    "filename": "bank_statement.pdf",
+    "format": "PDF",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ananya Nielsen",
+        "has_context": false
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "Account #910620",
+        "has_context": true
+      },
+      {
+        "entity": "ADDRESS",
+        "text": "306 Oakway Lane, Singapore",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "Pacific Standard Bank",
+      "01/09/2024 - 30/09/2024",
+      "$12,450.80",
+      "Sort Code 40-12-88"
+    ]
+  },
+  {
+    "filename": "hr_disciplinary_letter.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Fatima Gomez",
+        "has_context": false
+      },
+      {
+        "entity": "EMPLOYEE_ID",
+        "text": "EMP-57819",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mx. Kwame Takahashi",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Human Resources Department",
+      "Section 4.2 Standard Operating Procedure"
+    ]
+  },
+  {
+    "filename": "incident_report.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "USER_ID",
+        "text": "user=j_doe99",
+        "has_context": true
+      },
+      {
+        "entity": "IP_ADDRESS",
+        "text": "192.168.42.95",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "SEC-INC-2024-001",
+      "Port 443",
+      "nginx/1.24.0",
+      "SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ]
+  },
+  {
+    "filename": "client_onboarding.pptx",
+    "format": "PPTX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Chukwudi de Silva",
+        "has_context": false
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "555.646.5010 ext. 30",
+        "has_context": true
+      },
+      {
+        "entity": "EMAIL",
+        "text": "chukwudi.desilva@partner.example.com",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Tier 1 Client Onboarding",
+      "Enterprise SLA: 99.99%",
+      "Risk & Assurance Working Group"
+    ]
+  },
+  {
+    "filename": "medical_prescription.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Kwame Schumacher",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Chief Ingrid Featherstone",
+        "has_context": true
+      },
+      {
+        "entity": "CUSTOM_ID",
+        "text": "Policy No. POL-8902",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Amoxicillin 500mg",
+      "Rx# 99401",
+      "Take 1 capsule every 8 hours"
+    ]
+  },
+  {
+    "filename": "tax_declaration.csv",
+    "format": "CSV",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Elena Nielsen",
+        "has_context": true
+      },
+      {
+        "entity": "SSN",
+        "text": "132-50-7572",
+        "has_context": true
+      },
+      {
+        "entity": "ADDRESS",
+        "text": "479 Highland Crescent",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Form 1040-EZ",
+      "Tax Year 2023",
+      "84000.00",
+      "0.22"
+    ]
+  },
+  {
+    "filename": "customer_complaint.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Kwame Al-Mansoor",
+        "has_context": false
+      },
+      {
+        "entity": "EMAIL",
+        "text": "kwame dot al-mansoor at gmail dot com",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "555.470.4593 ext. 27",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Ticket #CAS-88120",
+      "Order #ORD-991204",
+      "Product SKU: PROD-4410",
+      "48 hours"
+    ]
+  },
+  {
+    "filename": "nda_agreement.docx",
+    "format": "DOCX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Liam Lindqvist",
+        "has_context": true
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Fatima Al-Mansoor",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Apex Capital Management",
+      "Horizon Data Systems Group",
+      "3 years",
+      "State of New York"
+    ]
+  },
+  {
+    "filename": "meeting_minutes.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Dmitri Kowalska",
+        "has_context": false
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Ananya Dubois",
+        "has_context": false
+      },
+      {
+        "entity": "PERSON_NAME",
+        "text": "Zahra van der Meer",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "Board Risk Committee",
+      "Q3 2024 Strategic Review",
+      "Action Item 3.1"
+    ]
+  },
+  {
+    "filename": "chat_transcript.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Mei-Ling Gomez",
+        "has_context": false
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+49 30 1192619",
+        "has_context": false
+      }
+    ],
+    "must_not_redact": [
+      "10:14 AM",
+      "10:15 AM",
+      "Sprint 42",
+      "jira.example.internal"
+    ]
+  },
+  {
+    "filename": "sales_receipt.txt",
+    "format": "TXT",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Dmitri Featherstone",
+        "has_context": true
+      },
+      {
+        "entity": "CREDIT_CARD",
+        "text": "Visa ending in 2827",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Subtotal: $45.00",
+      "Tax: $3.82",
+      "Total: $48.82",
+      "Store #108"
+    ]
+  },
+  {
+    "filename": "slide_deck_notes.pptx",
+    "format": "PPTX",
+    "source": "native",
+    "entities": [
+      {
+        "entity": "PERSON_NAME",
+        "text": "Soraya Dubois",
+        "has_context": true
+      },
+      {
+        "entity": "PHONE_NUMBER",
+        "text": "+49 30 9398441",
+        "has_context": true
+      }
+    ],
+    "must_not_redact": [
+      "Confidential Strategy Briefing",
+      "FY2025 Targets"
+    ]
+  }
+]

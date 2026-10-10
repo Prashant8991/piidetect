@@ -1,0 +1,8 @@
+CUSTOMER RECEIPT - Store #108
+Customer: Zahra Dubois
+Payment Method: Visa ending in 3606
+Auth Code: 994012
+
+Subtotal: $45.00
+Tax: $3.82
+Total: $48.82

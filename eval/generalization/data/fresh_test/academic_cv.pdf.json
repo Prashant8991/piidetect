@@ -1,0 +1,35 @@
+{
+  "filename": "academic_cv.pdf",
+  "format": "PDF",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Chief Fatima Kowalska",
+      "has_context": false
+    },
+    {
+      "entity": "EMAIL",
+      "text": "fatima.kowalska@stanford.example.edu",
+      "has_context": true
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+44 20 7620 8757",
+      "has_context": true
+    },
+    {
+      "entity": "ORCID",
+      "text": "0000-0002-9988-4691",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "2018 - 2021",
+    "2022-2027",
+    "(2023)",
+    "10.1038/s41586-020-2649-2",
+    "Stanford University",
+    "Department of Computer Science"
+  ]
+}

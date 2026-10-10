@@ -1,0 +1,23 @@
+{
+  "filename": "chat_transcript.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Siobhan Gomez",
+      "has_context": false
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+44 20 7566 5143",
+      "has_context": false
+    }
+  ],
+  "must_not_redact": [
+    "10:14 AM",
+    "10:15 AM",
+    "Sprint 42",
+    "jira.example.internal"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "filename": "client_onboarding.pptx",
+  "format": "PPTX",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Mateo Schumacher",
+      "has_context": false
+    },
+    {
+      "entity": "PHONE_NUMBER",
+      "text": "+1 (555) 395-5688",
+      "has_context": true
+    },
+    {
+      "entity": "EMAIL",
+      "text": "mateo.schumacher@partner.example.com",
+      "has_context": true
+    }
+  ],
+  "must_not_redact": [
+    "Tier 1 Client Onboarding",
+    "Enterprise SLA: 99.99%",
+    "Risk & Assurance Working Group"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "filename": "meeting_minutes.txt",
+  "format": "TXT",
+  "source": "native",
+  "entities": [
+    {
+      "entity": "PERSON_NAME",
+      "text": "Chukwudi O'Connor",
+      "has_context": false
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Nia de Silva",
+      "has_context": false
+    },
+    {
+      "entity": "PERSON_NAME",
+      "text": "Mateo Al-Mansoor",
+      "has_context": false
+    }
+  ],
+  "must_not_redact": [
+    "Board Risk Committee",
+    "Q3 2024 Strategic Review",
+    "Action Item 3.1"
+  ]
+}
